@@ -21,7 +21,8 @@ def capture(mode):
     except subprocess.TimeoutExpired:
         raise ValueError("screenshot timed out") from None
     if not r.stdout.startswith(b"\x89PNG"):
-        if r.returncode == 0:
+        # Esc exits 0 on some setups and non-zero with "Screenshot aborted." on others (GNOME Wayland).
+        if r.returncode == 0 or b"Screenshot aborted" in r.stderr:
             raise ValueError("screenshot cancelled")
         raise ValueError(f"flameshot failed: {r.stderr.decode(errors='replace').strip()[-300:]}")
     data = base64.b64encode(r.stdout).decode()

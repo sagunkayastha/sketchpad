@@ -32,6 +32,12 @@ class CaptureTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cancelled"):
             self.capture("box", return_value=result(b""))
 
+    def test_escape_with_error_exit_is_cancelled(self):
+        # flameshot 13 on GNOME exits non-zero on Esc, with Qt noise before "Screenshot aborted."
+        stderr = b"QPainter::drawEllipse: Painter not active\nflameshot: info: Screenshot aborted.\n"
+        with self.assertRaisesRegex(ValueError, "^screenshot cancelled$"):
+            self.capture("box", return_value=result(b"", 1, stderr))
+
     def test_flameshot_error_is_reported(self):
         with self.assertRaisesRegex(ValueError, "no display"):
             self.capture("full", return_value=result(b"", 1, b"qt: no display"))

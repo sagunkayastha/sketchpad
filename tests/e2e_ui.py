@@ -154,7 +154,8 @@ def run_checks(page, home):
     page.locator("#browser-list li", has_text="wide plot.png").click()
     page.wait_for_selector("#browser", state="hidden")
     img = page.evaluate("window.sketchpad.api.getSceneElements().map(e => ({type: e.type, locked: e.locked, x: e.x, w: e.width, h: e.height}))")
-    check("picked image lands on board, locked", len(img) == 1 and img[0]["type"] == "image" and img[0]["locked"])
+    check("picked image lands on board unlocked, so it can be resized and cropped",
+          len(img) == 1 and img[0]["type"] == "image" and not img[0]["locked"])
     check("3000x1500 plot scaled to fit 1600x1200", abs(img[0]["w"] - 1600) < 1 and abs(img[0]["h"] - 800) < 1)
     png = page.evaluate("window.sketchpad.exportPng()")
     check("image-only board still exports", isinstance(png, str) and png.startswith("data:image/png;base64,"))

@@ -273,12 +273,12 @@ async function insertImage({ name, mimeType, dataURL }) {
   const right = existing.reduce((m, e) => Math.max(m, e.x + e.width), 0);
   const fileId = `${Date.now()}-${name}`;
   excalidraw.addFiles([{ id: fileId, dataURL, mimeType, created: Date.now() }]);
-  // Locked so pen strokes on top of the plot don't grab and move it.
+  // Unlocked so it can be resized and cropped (double-click); pen strokes on top don't move it.
   const [element] = convertToExcalidrawElements([{
-    type: "image", fileId, locked: true,
+    type: "image", fileId,
     x: existing.length ? right + 40 : 0, y: 0, width: w * scale, height: h * scale,
   }]);
-  // Recorded in history so an accidental insert can be undone (it's locked, so hard to delete).
+  // Recorded in history so an accidental insert (or move) can be undone.
   excalidraw.updateScene({
     elements: [...excalidraw.getSceneElementsIncludingDeleted(), element],
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,

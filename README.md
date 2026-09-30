@@ -22,9 +22,10 @@ image on its next turn.
   sends on this device, with thumbnails; tap one to put its text back and its sketch on the board
   (as a flat image to annotate further).
 - **Open a plot from the machine**: the **Image…** button browses folders on the
-  session's machine, drops a PNG/JPEG/SVG onto the board (locked, scaled to fit), and
-  you annotate on top of it. Large raster sources shrink on insert; sketches export
-  at up to 2× resolution. Handy for "fix this part of the figure".
+  session's machine, drops a PNG/JPEG/SVG onto the board (scaled to fit; drag the corners
+  to resize, double-click to crop), and you annotate on top of it. Large raster sources
+  shrink on insert; sketches export at up to 2× resolution. Handy for "fix this part of
+  the figure".
 - **Screenshot the machine you're at**: **Screen ▾** → *Full screen* (all monitors) or
   *Select box* (flameshot's own drag-a-box overlay on that screen; Enter to take it, Esc
   to cancel). The shot lands on the board like an opened image.
