@@ -38,7 +38,7 @@ def public(s):
 
 def deliver_local(req):
     """Save the sketch on this machine and type the message into the session. Returns (status, body)."""
-    target = next((s for s in sessions.list_sessions() if s["id"] == req.get("session")), None)
+    target = next((s for s in sessions.list_sessions(fresh=True) if s["id"] == req.get("session")), None)
     if not target or not target["target"]:
         return 404, {"error": "session not found or not reachable"}
     image_path = None

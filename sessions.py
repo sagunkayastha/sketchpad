@@ -11,6 +11,7 @@ import os
 import socket
 import stat
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -102,7 +103,7 @@ def kitty_windows():
             continue
         try:
             r = subprocess.run(["kitty", "@", "--to", f"unix:{sock}", "ls"],
-                               capture_output=True, text=True, timeout=5)
+                               capture_output=True, text=True, timeout=2)
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
         if r.returncode == 0:
@@ -133,9 +134,23 @@ def find_target(pid, ppids, targets):
     return None
 
 
-def list_sessions():
-    ppids = parent_map()
-    targets = {**kitty_windows(), **tmux_panes()}
+ROUTE_TTL = 30
+_route_cache = {}
+_route_lock = threading.Lock()
+
+
+def routing(fresh=False):
+    """Cache expensive process and terminal discovery between page polls."""
+    with _route_lock:
+        if fresh or time.monotonic() - _route_cache.get("at", float("-inf")) > ROUTE_TTL:
+            ppids = parent_map()
+            targets = {**kitty_windows(), **tmux_panes()}
+            _route_cache.update(at=time.monotonic(), ppids=ppids, targets=targets)
+        return _route_cache["ppids"], _route_cache["targets"]
+
+
+def list_sessions(fresh=False):
+    ppids, targets = routing(fresh)
     result = []
     for s in read_sessions():
         target = find_target(s["pid"], ppids, targets) or socket_target(s)

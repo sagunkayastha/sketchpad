@@ -4,6 +4,7 @@ import os
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -145,6 +146,37 @@ class ProcStartTest(unittest.TestCase):
             self.assertTrue(sessions.same_process({"pid": 7}, d))
             self.assertTrue(sessions.same_process({"pid": 8, "procStart": "1"}, d))
             self.assertEqual(alive.call_count, 2)
+
+
+class RouteCacheTest(unittest.TestCase):
+    def setUp(self):
+        sessions._route_cache.clear()
+        self.ps = mock.patch.object(sessions, "parent_map", return_value={}).start()
+        self.kitty = mock.patch.object(sessions, "kitty_windows", return_value={}).start()
+        self.tmux = mock.patch.object(sessions, "tmux_panes", return_value={}).start()
+        mock.patch.object(sessions, "read_sessions", return_value=[{"pid": 42, "sessionId": "s"}]).start()
+        self.addCleanup(mock.patch.stopall)
+        self.addCleanup(sessions._route_cache.clear)
+
+    def calls(self):
+        return (self.ps.call_count, self.kitty.call_count, self.tmux.call_count)
+
+    def test_listing_reuses_routes(self):
+        sessions.list_sessions()
+        sessions.list_sessions()
+        self.assertEqual(self.calls(), (1, 1, 1))
+
+    def test_fresh_rediscovers(self):
+        sessions.list_sessions()
+        sessions.list_sessions(fresh=True)
+        self.assertEqual(self.calls(), (2, 2, 2))
+
+    def test_routes_expire(self):
+        sessions.list_sessions()
+        later = time.monotonic() + sessions.ROUTE_TTL + 1
+        with mock.patch.object(sessions.time, "monotonic", return_value=later):
+            sessions.list_sessions()
+        self.assertEqual(self.calls(), (2, 2, 2))
 
 
 if __name__ == "__main__":
