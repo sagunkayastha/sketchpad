@@ -19,7 +19,8 @@ image on its next turn.
 - **Session list**: every running Claude Code session on your machines, with its
   working directory and busy/idle state. Tap one to target it; **Send** names the destination.
 - **Recent and History**: quick picks for recently used sessions. History keeps the last 20
-  sends on this device, with thumbnails; tap one to reopen its text and sketch for editing.
+  sends on this device, with thumbnails; tap one to put its text back and its sketch on the board
+  (as a flat image to annotate further).
 - **Open a plot from the machine**: the **Image…** button browses folders on the
   session's machine, drops a PNG/JPEG/SVG onto the board (locked, scaled to fit), and
   you annotate on top of it. Large raster sources shrink on insert; sketches export
@@ -39,7 +40,8 @@ image on its next turn.
 ## How delivery works
 
 Claude Code writes `~/.claude/sessions/<pid>.json` for each running session. sketchpad
-reads those, checks the pid is alive, and picks one of two ways in:
+reads those, checks the process is still the one that wrote the file (its start time
+matches `procStart`, so a reused pid doesn't count), and picks one of two ways in:
 
 1. **Typed into the terminal** when the session runs in a **tmux** pane
    (`tmux send-keys`) or a **kitty** window (`kitty @ send-text`). The message arrives
@@ -152,6 +154,8 @@ Layout:
 ## Limitations
 
 - Outside tmux and kitty the message is framed as a peer message, not user input (see above).
+- The list checks tmux/kitty routes at most every 30 s, so a just-started session can show the
+  wrong route (or "not reachable") briefly. Sending always checks fresh.
 - The Excalidraw eraser deletes whole elements, not parts of a stroke (upstream behaviour).
 - SVG sources keep their original data; very complex SVGs can still make a tab sluggish.
 - Sketches accumulate on disk. Deleting one leaves its History row, but that sketch

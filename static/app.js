@@ -337,7 +337,6 @@ async function pick(path) {
   browserStatus("Opening…");
   try {
     await insertImage(await api(`/api/image?${new URLSearchParams({ host: $("browser-host").value, path })}`));
-    picking = false;
     $("browser").hidden = true;
   } catch (e) {
     browserStatus(e.message);
@@ -358,7 +357,6 @@ $("open-image").onclick = () => {
 };
 $("browser-host").onchange = () => browse("~");
 $("browser-close").onclick = () => { $("browser").hidden = true; };
-$("browser-path").oninput = () => { ++browseSeq; };
 $("browser-path").onkeydown = (e) => {
   if (e.key !== "Enter") return;
   e.preventDefault();

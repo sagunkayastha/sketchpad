@@ -208,5 +208,23 @@ class DeliverErrorsTest(unittest.TestCase):
         target = {"kind": "kitty", "socket": "/s", "window": 3}
         self.assertTrue(self.run_deliver(target, [mock.Mock(), err]).partial)
 
+    def test_hung_typing_times_out(self):
+        # A stuck terminal must not hold the send lock forever.
+        err = subprocess.TimeoutExpired(["tmux"], 5)
+        e = self.run_deliver({"kind": "tmux", "pane": "%1"}, err)
+        self.assertFalse(e.partial)
+        self.assertIn("timed out", str(e))
+
+    def test_hung_enter_times_out_as_partial(self):
+        err = subprocess.TimeoutExpired(["kitty"], 5)
+        target = {"kind": "kitty", "socket": "/s", "window": 3}
+        self.assertTrue(self.run_deliver(target, [mock.Mock(), err]).partial)
+
+    def test_commands_have_a_timeout(self):
+        with mock.patch.object(sessions.subprocess, "run") as run, mock.patch.object(sessions.time, "sleep"):
+            sessions.deliver({"kind": "tmux", "pane": "%1"}, "hi")
+        self.assertTrue(all(c.kwargs.get("timeout") for c in run.call_args_list))
+
+
 if __name__ == "__main__":
     unittest.main()

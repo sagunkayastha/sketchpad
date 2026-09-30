@@ -71,9 +71,9 @@ def tmux_panes():
     try:
         r = subprocess.run(
             ["tmux", "list-panes", "-a", "-F", "#{pane_pid}\t#{pane_id}\t#{session_name}"],
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=2,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return {}
     panes = {}
     for line in r.stdout.splitlines():
@@ -208,14 +208,15 @@ def deliver(target, message):
         type_text = [*kitty, "--stdin"], message
         submit = [*kitty, "\\r"], None
     def run(cmd, stdin):
-        return subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=True)
+        # A hung terminal would otherwise hold the send lock and block every later send.
+        return subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=True, timeout=5)
     try:
         run(*type_text)
-    except (OSError, subprocess.CalledProcessError) as e:
+    except (OSError, subprocess.SubprocessError) as e:
         raise DeliveryError(f"{kind}: {_why(e)}") from e
     time.sleep(0.3)
     try:
         run(*submit)
-    except (OSError, subprocess.CalledProcessError) as e:
+    except (OSError, subprocess.SubprocessError) as e:
         raise DeliveryError(f"{kind}: typed the message but couldn't press Enter; press Enter in that terminal",
                             partial=True) from e
