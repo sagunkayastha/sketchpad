@@ -27,6 +27,8 @@ class CaptureTest(unittest.TestCase):
         _, run = self.capture("box", return_value=result(PNG))
         self.assertEqual(run.call_args.args[0], ["flameshot", "gui", "--raw"])
         self.assertGreater(run.call_args.kwargs["timeout"], 60)
+        # On Wayland the overlay covers only one monitor; through XWayland it covers all.
+        self.assertEqual(run.call_args.kwargs["env"]["QT_QPA_PLATFORM"], "xcb")
 
     def test_escape_is_cancelled(self):
         with self.assertRaisesRegex(ValueError, "cancelled"):

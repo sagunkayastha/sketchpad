@@ -4,10 +4,13 @@
 screen and waits for you to drag a box and press Enter (Esc cancels).
 """
 import base64
+import os
 import subprocess
 
 COMMANDS = {"full": ["flameshot", "full", "--raw"], "box": ["flameshot", "gui", "--raw"]}
 TIMEOUTS = {"full": 15, "box": 120}  # box waits for a person
+# On Wayland (GNOME) flameshot's overlay covers only one monitor; through XWayland it spans them all.
+ENV = {"full": {}, "box": {"QT_QPA_PLATFORM": "xcb"}}
 
 
 def capture(mode):
@@ -15,7 +18,8 @@ def capture(mode):
     if mode not in COMMANDS:
         raise ValueError(f"unknown screenshot mode: {mode}")
     try:
-        r = subprocess.run(COMMANDS[mode], capture_output=True, timeout=TIMEOUTS[mode])
+        r = subprocess.run(COMMANDS[mode], capture_output=True, timeout=TIMEOUTS[mode],
+                           env={**os.environ, **ENV[mode]})
     except FileNotFoundError:
         raise ValueError("flameshot is not installed on this machine") from None
     except subprocess.TimeoutExpired:
