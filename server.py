@@ -54,7 +54,8 @@ def deliver_local(req):
             status, body = RECENT_SENDS[send_id][2]
             return status, {**body, "duplicate": True}
         status, body = _deliver(req)
-        if send_id and status == 200:
+        # A partial terminal failure already typed text; retrying must not type it again.
+        if send_id and (status == 200 or body.get("partial")):
             RECENT_SENDS[send_id] = (digest, now, (status, body))
         return status, body
 

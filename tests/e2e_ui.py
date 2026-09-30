@@ -269,6 +269,24 @@ def run_session_checks(page, home, inbox):
           and page.input_value("#text") == "e2e hello")
     check("reopening selects that session", page.inner_text("#send") == "Send to e2e-one")
 
+    page.evaluate("""() => {
+      const original = window.fetch;
+      window.fetch = (...args) => original(...args).then((response) => {
+        if (args[0] !== '/api/send') return response;
+        return new Promise((resolve) => { window.releaseSend = () => resolve(response); });
+      });
+    }""")
+    page.evaluate("window.sketchpad.api.resetScene()")
+    page.fill("#text", "delayed A")
+    page.click("#send")
+    page.wait_for_function("typeof window.releaseSend === 'function'", timeout=10000)
+    page.locator("#sessions li", has_text="e2e-two").click()
+    page.evaluate("window.releaseSend()")
+    page.wait_for_function("document.getElementById('status').textContent.includes('Sent to e2e-one')", timeout=10000)
+    entry = page.evaluate("JSON.parse(localStorage.getItem('sketchpad-history'))[0]")
+    check("switching sessions during send keeps History on original destination",
+          entry["id"] == "s1" and entry["text"] == "delayed A")
+
 
 if __name__ == "__main__":
     main()

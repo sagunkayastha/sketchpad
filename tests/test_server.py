@@ -155,6 +155,14 @@ class DeliverLocalTest(unittest.TestCase):
         self.assertEqual((status, body["partial"]), (502, True))
         self.assertEqual(len(list(self.sketches.iterdir())), 1)
 
+    def test_partial_retry_does_not_retype(self):
+        self.deliver.side_effect = [server.sessions.DeliveryError("typed, not submitted", partial=True), None]
+        first_status, first = server.deliver_local(self.req())
+        retry_status, retry = server.deliver_local(self.req())
+        self.assertEqual((first_status, retry_status), (502, 502))
+        self.assertTrue(first["partial"] and retry["partial"] and retry["duplicate"])
+        self.assertEqual(self.deliver.call_count, 1)
+
 class HelperTokenTest(unittest.TestCase):
     def test_empty_token_file_is_refused(self):
         with tempfile.TemporaryDirectory() as d:

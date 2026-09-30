@@ -374,14 +374,15 @@ let pendingSend = null;
 const sendLimit = { MAX_SEND: 24 * 1024 * 1024 };
 
 $("send").onclick = async () => {
-  const found = findSession(selected);
+  const destination = selected && { host: selected.host, id: selected.id };
+  const found = findSession(destination);
   if (!found) return setStatus(selected ? "That session is gone. Pick another on the left." : "Pick a session on the left first.", true);
   const text = $("text").value.trim();
   $("send").disabled = true;
   try {
     const image = await exportPng();
     if (!text && !image) return setStatus("Nothing to send.", true);
-    const req = { host: selected.host, session: selected.id, text, image };
+    const req = { host: destination.host, session: destination.id, text, image };
     const key = JSON.stringify(req);
     if (key.length > sendLimit.MAX_SEND)
       return setStatus(`Too big to send (${formatSize(key.length)}; limit ${formatSize(sendLimit.MAX_SEND)}). Remove or crop an image.`, true);
@@ -394,8 +395,8 @@ $("send").onclick = async () => {
     });
     pendingSend = null;
     const name = found.s.label || found.s.id;
-    remember(selected, name);
-    addHistory({ at: Date.now(), host: selected.host, id: selected.id, label: name, text, image: r.image }, image);
+    remember(destination, name);
+    addHistory({ at: Date.now(), host: destination.host, id: destination.id, label: name, text, image: r.image }, image);
     setStatus(`${r.duplicate ? "Already sent to" : "Sent to"} ${name} via ${r.via === "socket" ? "inbox" : r.via} ✓ ${new Date().toLocaleTimeString()}`);
     renderRecent();
     $("text").value = "";
