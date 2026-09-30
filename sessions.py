@@ -174,22 +174,48 @@ def build_message(text, image_path):
     return " ".join(p for p in parts if p)
 
 
+class DeliveryError(Exception):
+    """partial=True means text was typed but Enter could not be pressed."""
+
+    def __init__(self, msg, partial=False):
+        super().__init__(msg)
+        self.partial = partial
+
+
+def _why(e):
+    return (getattr(e, "stderr", None) or "").strip() or str(e)
+
+
 def deliver(target, message):
-    if target["kind"] == "socket":
-        # Newline-delimited JSON: authenticate, then a user message. Content must be a plain string.
+    """Deliver a message; the inbox socket provides no acknowledgement."""
+    kind = target["kind"]
+    if kind == "socket":
         lines = [{"type": "auth", "token": target["token"]},
                  {"type": "user", "message": {"role": "user", "content": message}}]
-        with socket.socket(socket.AF_UNIX) as c:
-            c.settimeout(5)
-            c.connect(target["socket"])
-            c.sendall("".join(json.dumps(line) + "\n" for line in lines).encode())
-    elif target["kind"] == "tmux":
-        subprocess.run(["tmux", "send-keys", "-t", target["pane"], "-l", "--", message], check=True)
-        time.sleep(0.3)  # let Claude Code ingest the text before submitting
-        subprocess.run(["tmux", "send-keys", "-t", target["pane"], "Enter"], check=True)
+        try:
+            with socket.socket(socket.AF_UNIX) as c:
+                c.settimeout(5)
+                c.connect(target["socket"])
+                c.sendall("".join(json.dumps(line) + "\n" for line in lines).encode())
+        except OSError as e:
+            raise DeliveryError(f"inbox socket: {e}") from e
+        return
+    if kind == "tmux":
+        type_text = ["tmux", "send-keys", "-t", target["pane"], "-l", "--", message], None
+        submit = ["tmux", "send-keys", "-t", target["pane"], "Enter"], None
     else:
         kitty = ["kitty", "@", "--to", f"unix:{target['socket']}", "send-text", "--match", f"id:{target['window']}"]
-        # --stdin sends the text as-is; the positional form would interpret backslash escapes.
-        subprocess.run([*kitty, "--stdin"], input=message, text=True, check=True)
-        time.sleep(0.3)
-        subprocess.run([*kitty, "\\r"], check=True)
+        type_text = [*kitty, "--stdin"], message
+        submit = [*kitty, "\\r"], None
+    def run(cmd, stdin):
+        return subprocess.run(cmd, input=stdin, capture_output=True, text=True, check=True)
+    try:
+        run(*type_text)
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise DeliveryError(f"{kind}: {_why(e)}") from e
+    time.sleep(0.3)
+    try:
+        run(*submit)
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise DeliveryError(f"{kind}: typed the message but couldn't press Enter; press Enter in that terminal",
+                            partial=True) from e

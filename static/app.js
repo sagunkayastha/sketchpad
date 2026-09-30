@@ -219,6 +219,10 @@ $("browser-path").onkeydown = (e) => {
 };
 
 // ---- send ----
+// The LAN page is plain HTTP, so crypto.randomUUID is unavailable.
+const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+let pendingSend = null;
+
 $("send").onclick = async () => {
   if (!selected) return setStatus("Pick a session on the left first.", true);
   const text = $("text").value.trim();
@@ -226,13 +230,17 @@ $("send").onclick = async () => {
   try {
     const image = await exportPng();
     if (!text && !image) return setStatus("Nothing to send.", true);
+    const req = { host: selected.host, session: selected.id, text, image };
+    const key = JSON.stringify(req);
+    if (!pendingSend || pendingSend.key !== key) pendingSend = { id: makeId(), key };
     setStatus("Sending…");
-    await api("/api/send", {
+    const r = await api("/api/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ host: selected.host, session: selected.id, text, image }),
+      body: JSON.stringify({ ...req, send_id: pendingSend.id }),
     });
-    setStatus(`Sent ✓ ${new Date().toLocaleTimeString()}`);
+    pendingSend = null;
+    setStatus(`${r.duplicate ? "Already sent" : "Sent"} ✓ ${new Date().toLocaleTimeString()}`);
     $("text").value = "";
     excalidraw.resetScene();
   } catch (e) {

@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 import auth
 import server
@@ -91,6 +92,59 @@ class FileRoutesTest(unittest.TestCase):
         status, _ = self.get(self.helper, f"/api/ls?path={self.d}", {"X-Helper-Token": "wrong"})
         self.assertEqual(status, 401)
 
+
+class DeliverLocalTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.sketches = Path(self.tmp.name)
+        server.RECENT_SENDS.clear()
+        session = {"id": "s1", "label": "L", "via": "tmux", "target": {"kind": "tmux", "pane": "%1"}}
+        self.list = mock.patch.object(server.sessions, "list_sessions", return_value=[session]).start()
+        self.deliver = mock.patch.object(server.sessions, "deliver").start()
+        mock.patch.object(server, "SKETCHES", self.sketches).start()
+        self.addCleanup(mock.patch.stopall)
+
+    def req(self, **kw):
+        image = "data:image/png;base64," + base64.b64encode(PNG).decode()
+        return {"session": "s1", "text": "hi", "image": image, "send_id": "a1", **kw}
+
+    def test_resolves_route_fresh_and_reports_it(self):
+        status, body = server.deliver_local(self.req())
+        self.list.assert_called_with(fresh=True)
+        self.assertEqual((status, body["via"], body["label"]), (200, "tmux", "L"))
+
+    def test_same_send_id_delivers_once(self):
+        _, first = server.deliver_local(self.req())
+        status, again = server.deliver_local(self.req())
+        self.assertEqual(status, 200)
+        self.assertEqual(self.deliver.call_count, 1)
+        self.assertTrue(again["duplicate"])
+        self.assertEqual(again["image"], first["image"])
+
+    def test_same_id_with_changed_content_delivers_again(self):
+        server.deliver_local(self.req())
+        server.deliver_local(self.req(text="changed"))
+        self.assertEqual(self.deliver.call_count, 2)
+
+    def test_failure_removes_png_and_reports(self):
+        self.deliver.side_effect = server.sessions.DeliveryError("tmux: boom")
+        status, body = server.deliver_local(self.req())
+        self.assertEqual((status, body["partial"]), (502, False))
+        self.assertIn("boom", body["error"])
+        self.assertEqual(list(self.sketches.iterdir()), [])
+
+    def test_failed_send_can_be_retried(self):
+        self.deliver.side_effect = [server.sessions.DeliveryError("boom"), None]
+        self.assertEqual(server.deliver_local(self.req())[0], 502)
+        self.assertEqual(server.deliver_local(self.req())[0], 200)
+        self.assertEqual(self.deliver.call_count, 2)
+
+    def test_partial_keeps_png(self):
+        self.deliver.side_effect = server.sessions.DeliveryError("typed, not submitted", partial=True)
+        status, body = server.deliver_local(self.req())
+        self.assertEqual((status, body["partial"]), (502, True))
+        self.assertEqual(len(list(self.sketches.iterdir())), 1)
 
 if __name__ == "__main__":
     unittest.main()

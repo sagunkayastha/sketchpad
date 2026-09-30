@@ -6,6 +6,7 @@ helper - API-only agent for another machine; the hub reaches it through an SSH t
 import argparse
 import base64
 import getpass
+import hashlib
 import hmac
 import json
 import socket
@@ -36,8 +37,29 @@ def public(s):
     return {k: v for k, v in s.items() if k != "target"}
 
 
+RECENT_SENDS = {}
+RECENT_TTL = 600
+SEND_LOCK = threading.Lock()
+
+
 def deliver_local(req):
-    """Save the sketch on this machine and type the message into the session. Returns (status, body)."""
+    """Deduplicate a retried send on the machine that owns the session."""
+    send_id = req.get("send_id")
+    digest = hashlib.sha256(json.dumps([req.get("session"), req.get("text", ""), req.get("image")]).encode()).hexdigest()
+    with SEND_LOCK:
+        now = time.monotonic()
+        for k in [k for k, v in RECENT_SENDS.items() if now - v[1] > RECENT_TTL]:
+            del RECENT_SENDS[k]
+        if send_id in RECENT_SENDS and RECENT_SENDS[send_id][0] == digest:
+            status, body = RECENT_SENDS[send_id][2]
+            return status, {**body, "duplicate": True}
+        status, body = _deliver(req)
+        if send_id and status == 200:
+            RECENT_SENDS[send_id] = (digest, now, (status, body))
+        return status, body
+
+
+def _deliver(req):
     target = next((s for s in sessions.list_sessions(fresh=True) if s["id"] == req.get("session")), None)
     if not target or not target["target"]:
         return 404, {"error": "session not found or not reachable"}
@@ -49,8 +71,14 @@ def deliver_local(req):
     message = sessions.build_message(req.get("text", ""), image_path)
     if not message:
         return 400, {"error": "nothing to send"}
-    sessions.deliver(target["target"], message)
-    return 200, {"ok": True, "image": str(image_path) if image_path else None}
+    try:
+        sessions.deliver(target["target"], message)
+    except sessions.DeliveryError as e:
+        if image_path and not e.partial:
+            image_path.unlink(missing_ok=True)
+        return 502, {"error": str(e), "partial": e.partial}
+    return 200, {"ok": True, "image": str(image_path) if image_path else None,
+                 "via": target["via"], "label": target["label"]}
 
 
 def call_helper(url, path, token, body=None, timeout=3):

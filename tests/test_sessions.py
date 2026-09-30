@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -178,6 +179,34 @@ class RouteCacheTest(unittest.TestCase):
             sessions.list_sessions()
         self.assertEqual(self.calls(), (2, 2, 2))
 
+
+class DeliverErrorsTest(unittest.TestCase):
+    def test_missing_socket_is_delivery_error(self):
+        with self.assertRaises(sessions.DeliveryError) as cm:
+            sessions.deliver({"kind": "socket", "socket": "/nonexistent/x.sock", "token": "t"}, "hi")
+        self.assertFalse(cm.exception.partial)
+
+    def run_deliver(self, target, side_effect):
+        with mock.patch.object(sessions.subprocess, "run", side_effect=side_effect), \
+             mock.patch.object(sessions.time, "sleep"), \
+             self.assertRaises(sessions.DeliveryError) as cm:
+            sessions.deliver(target, "hi")
+        return cm.exception
+
+    def test_typing_failure_is_not_partial(self):
+        err = subprocess.CalledProcessError(1, ["tmux"], stderr="can't find pane: %1")
+        e = self.run_deliver({"kind": "tmux", "pane": "%1"}, err)
+        self.assertFalse(e.partial)
+        self.assertIn("can't find pane", str(e))
+
+    def test_tmux_enter_failure_is_partial(self):
+        err = subprocess.CalledProcessError(1, ["tmux"])
+        self.assertTrue(self.run_deliver({"kind": "tmux", "pane": "%1"}, [mock.Mock(), err]).partial)
+
+    def test_kitty_enter_failure_is_partial(self):
+        err = subprocess.CalledProcessError(1, ["kitty"])
+        target = {"kind": "kitty", "socket": "/s", "window": 3}
+        self.assertTrue(self.run_deliver(target, [mock.Mock(), err]).partial)
 
 if __name__ == "__main__":
     unittest.main()
