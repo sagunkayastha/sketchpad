@@ -122,11 +122,14 @@ let excalidraw = null; // imperative API, set once mounted
 createRoot($("board")).render(React.createElement(Excalidraw, {
   excalidrawAPI: (a) => {
     excalidraw = a;
-    window.sketchpad = { api: a, exportPng, insertImage }; // hook for tests/e2e_ui.py
+    window.sketchpad = { api: a, exportPng, insertImage,
+      get MAX_SEND() { return sendLimit.MAX_SEND; }, set MAX_SEND(v) { sendLimit.MAX_SEND = v; } }; // e2e hook
   },
   initialData: { appState: { viewBackgroundColor: "#ffffff" } },
   UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false } },
 }));
+
+const EXPORT_MAX = 4096;
 
 async function exportPng() {
   const elements = excalidraw.getSceneElements();
@@ -136,6 +139,10 @@ async function exportPng() {
     appState: { ...excalidraw.getAppState(), exportBackground: true, viewBackgroundColor: "#ffffff" },
     files: excalidraw.getFiles(),
     mimeType: "image/png",
+    getDimensions: (w, h) => {
+      const scale = Math.min(2, EXPORT_MAX / Math.max(w, h));
+      return { width: Math.round(w * scale), height: Math.round(h * scale), scale };
+    },
   });
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -146,11 +153,25 @@ async function exportPng() {
 
 // ---- open an image (e.g. a plot) from one of the machines onto the board ----
 const MAX_W = 1600, MAX_H = 1200;
+const MAX_SRC_W = MAX_W * 2, MAX_SRC_H = MAX_H * 2;
+
+function shrink(img, dataURL, mimeType) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const s = Math.min(1, MAX_SRC_W / w, MAX_SRC_H / h);
+  if (s === 1 || mimeType === "image/svg+xml") return { dataURL, mimeType };
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * s);
+  c.height = Math.round(h * s);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  const out = mimeType === "image/jpeg" ? "image/jpeg" : "image/png";
+  return { dataURL: c.toDataURL(out, 0.9), mimeType: out };
+}
 
 async function insertImage({ name, mimeType, dataURL }) {
   const img = new Image();
   img.src = dataURL;
   await img.decode();
+  ({ dataURL, mimeType } = shrink(img, dataURL, mimeType));
   // An SVG without width/height reports 0; give it a sane default size.
   const w = img.naturalWidth || 800, h = img.naturalHeight || 600;
   const scale = Math.min(1, MAX_W / w, MAX_H / h);
@@ -222,6 +243,7 @@ async function pick(path) {
   browserStatus("Opening…");
   try {
     await insertImage(await api(`/api/image?${new URLSearchParams({ host: $("browser-host").value, path })}`));
+    picking = false;
     $("browser").hidden = true;
   } catch (e) {
     browserStatus(e.message);
@@ -254,6 +276,7 @@ $("browser-path").onkeydown = (e) => {
 // The LAN page is plain HTTP, so crypto.randomUUID is unavailable.
 const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 let pendingSend = null;
+const sendLimit = { MAX_SEND: 24 * 1024 * 1024 };
 
 $("send").onclick = async () => {
   const found = findSession(selected);
@@ -265,6 +288,8 @@ $("send").onclick = async () => {
     if (!text && !image) return setStatus("Nothing to send.", true);
     const req = { host: selected.host, session: selected.id, text, image };
     const key = JSON.stringify(req);
+    if (key.length > sendLimit.MAX_SEND)
+      return setStatus(`Too big to send (${formatSize(key.length)}; limit ${formatSize(sendLimit.MAX_SEND)}). Remove or crop an image.`, true);
     if (!pendingSend || pendingSend.key !== key) pendingSend = { id: makeId(), key };
     setStatus("Sending…");
     const r = await api("/api/send", {

@@ -86,6 +86,7 @@ def main():
     auth.save_credentials(home / ".config" / "sketchpad" / "auth.json", "e2e", "e2e-pass")
     (home / "my plots").mkdir()
     make_png(home / "my plots" / "wide plot.png", 3000, 1500)
+    make_png(home / "my plots" / "huge plot.png", 5000, 2500)
     inbox = FakeInbox(home / "inbox.sock")
     env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
     env.update(HOME=str(home), XDG_RUNTIME_DIR=str(home), TMUX_TMPDIR=str(home))
@@ -177,6 +178,34 @@ def run_checks(page, home):
     check("double-tap inserts the image once", page.evaluate("window.sketchpad.api.getSceneElements().length") == 1)
     page.evaluate("window.sketchpad.api.resetScene()")
 
+    draw_rect(page)
+    width = page.evaluate("""async () => {
+      const i = new Image(); i.src = await window.sketchpad.exportPng(); await i.decode(); return i.naturalWidth;
+    }""")
+    check("small sketch exports at 2x (120px rect -> >=270px PNG)", width >= 270)
+    page.evaluate("window.sketchpad.api.resetScene()")
+    page.evaluate("""() => {
+      const [rect] = window.ExcalidrawLib.convertToExcalidrawElements([{type: 'rectangle', x: 0, y: 0, width: 5000, height: 100}]);
+      window.sketchpad.api.updateScene({elements: [rect]});
+    }""")
+    width = page.evaluate("""async () => {
+      const i = new Image(); i.src = await window.sketchpad.exportPng(); await i.decode(); return i.naturalWidth;
+    }""")
+    check("wide board export stays within 4096px", width <= 4096)
+    page.evaluate("window.sketchpad.api.resetScene()")
+
+    page.click("#open-image")
+    page.fill("#browser-path", "~/my plots/huge plot.png")
+    page.press("#browser-path", "Enter")
+    page.wait_for_selector("#browser", state="hidden")
+    dims = page.evaluate("""async () => {
+      const files = window.sketchpad.api.getFiles();
+      const e = window.sketchpad.api.getSceneElements()[0];
+      const i = new Image(); i.src = files[e.fileId].dataURL; await i.decode(); return [i.naturalWidth, i.naturalHeight];
+    }""")
+    check("5000x2500 source stored at <=3200x2400", dims[0] <= 3200 and dims[1] <= 2400)
+    page.evaluate("window.sketchpad.api.resetScene()")
+
 
 def run_session_checks(page, home, inbox):
     page.wait_for_selector("#sessions li.empty")
@@ -210,6 +239,14 @@ def run_session_checks(page, home, inbox):
     page.fill("#text", "")
     add_session(home, inbox, "s1", "e2e-one")
     page.wait_for_function("document.getElementById('send').textContent === 'Send to e2e-one'", timeout=10000)
+
+    page.evaluate("window.sketchpad.MAX_SEND = 100")
+    draw_rect(page)
+    page.click("#send")
+    page.wait_for_function("document.getElementById('status').textContent.includes('Too big to send')", timeout=10000)
+    check("oversize send refused before upload", "Too big to send" in page.inner_text("#status"))
+    page.evaluate("window.sketchpad.MAX_SEND = 24 * 1024 * 1024")
+    page.evaluate("window.sketchpad.api.resetScene()")
 
 
 if __name__ == "__main__":
