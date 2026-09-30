@@ -1,9 +1,13 @@
 """Browser end-to-end check: real hub + headless Chrome. Run: python3 tests/e2e_ui.py"""
+import hashlib
+import json
 import os
+import socket
 import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import zlib
@@ -33,13 +37,60 @@ def check(name, cond):
         raise SystemExit(1)
 
 
+class FakeInbox:
+    """Receive test sends without reaching a developer's terminal."""
+
+    def __init__(self, path):
+        self.path, self.messages = str(path), []
+        self.srv = socket.socket(socket.AF_UNIX)
+        self.srv.bind(self.path)
+        self.srv.listen(8)
+        threading.Thread(target=self.serve, daemon=True).start()
+
+    def serve(self):
+        while True:
+            conn, _ = self.srv.accept()
+            with conn:
+                buf = b""
+                while buf.count(b"\n") < 2:
+                    chunk = conn.recv(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+            lines = [json.loads(line) for line in buf.decode().splitlines() if line]
+            if len(lines) == 2:
+                self.messages.append(lines[1]["message"]["content"])
+
+
+def add_session(home, inbox, sid, name):
+    d = home / ".claude" / "sessions"
+    d.mkdir(parents=True, exist_ok=True)
+    pid = os.getpid()
+    start = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    (d / f"{sid}.json").write_text(json.dumps({
+        "pid": pid, "sessionId": sid, "name": name, "cwd": str(home), "status": "idle",
+        "procStart": start, "messagingSocketPath": inbox.path}))
+    digest = hashlib.sha256(os.path.abspath(inbox.path).encode()).hexdigest()
+    (d / f"{pid}.{digest}.key").write_text(json.dumps({"peerToken": "e2e-token"}))
+
+
+def draw_rect(page):
+    page.evaluate("""() => {
+      const [rect] = window.ExcalidrawLib.convertToExcalidrawElements([{type: 'rectangle', x: 0, y: 0, width: 120, height: 60}]);
+      window.sketchpad.api.updateScene({elements: [rect]});
+    }""")
+
+
 def main():
     home = Path(tempfile.mkdtemp())
     auth.save_credentials(home / ".config" / "sketchpad" / "auth.json", "e2e", "e2e-pass")
     (home / "my plots").mkdir()
     make_png(home / "my plots" / "wide plot.png", 3000, 1500)
+    inbox = FakeInbox(home / "inbox.sock")
+    env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
+    env.update(HOME=str(home), XDG_RUNTIME_DIR=str(home), TMUX_TMPDIR=str(home))
     hub = subprocess.Popen([sys.executable, "server.py", "serve", "--bind", "127.0.0.1", "--port", str(PORT)],
-                           cwd=ROOT, env={**os.environ, "HOME": str(home)})
+                           cwd=ROOT, env=env)
     try:
         for _ in range(50):
             try:
@@ -53,6 +104,7 @@ def main():
             errors = []
             page.on("pageerror", lambda e: errors.append(str(e)))
             run_checks(page, home)
+            run_session_checks(page, home, inbox)
             check("no page errors", not errors or print(errors))
             browser.close()
     finally:
@@ -81,10 +133,7 @@ def run_checks(page, home):
           page.evaluate("window.sketchpad.api.getAppState().activeTool.type") == "selection")
     page.fill("#text", "")
 
-    page.evaluate("""() => {
-      const [rect] = window.ExcalidrawLib.convertToExcalidrawElements([{type: 'rectangle', x: 0, y: 0, width: 120, height: 60}]);
-      window.sketchpad.api.updateScene({elements: [rect]});
-    }""")
+    draw_rect(page)
     png = page.evaluate("window.sketchpad.exportPng()")
     check("drawing exports a PNG", isinstance(png, str) and png.startswith("data:image/png;base64,"))
     page.evaluate("window.sketchpad.api.resetScene()")
@@ -118,6 +167,40 @@ def run_checks(page, home):
     page.wait_for_function("document.getElementById('browser-status').textContent.includes('not found')")
     check("missing folder shows an error in the dialog", True)
     page.click("#browser-close")
+
+
+def run_session_checks(page, home, inbox):
+    page.wait_for_selector("#sessions li.empty")
+    check("empty state explains there are no sessions", "No Claude Code sessions running." in page.inner_text("#sessions"))
+
+    add_session(home, inbox, "s1", "e2e-one")
+    row = page.locator("#sessions li", has_text="e2e-one")
+    row.wait_for(timeout=10000)
+    check("fake session goes through the inbox, never a real terminal", "not reachable" not in row.inner_text())
+    check("session rows are touch-sized", row.bounding_box()["height"] >= 44)
+    row.click()
+    check("Send names the destination", page.inner_text("#send") == "Send to e2e-one")
+    check("Send keeps the accent button styling", page.evaluate("""() => {
+      const s = getComputedStyle(document.getElementById('send'));
+      return s.backgroundColor === 'rgb(79, 140, 255)' && s.color === 'rgb(255, 255, 255)';
+    }"""))
+
+    draw_rect(page)
+    page.fill("#text", "e2e hello")
+    page.click("#send")
+    page.wait_for_function("document.getElementById('status').textContent.includes('Sent to e2e-one')", timeout=10000)
+    check("session received the text and the sketch path",
+          len(inbox.messages) == 1 and inbox.messages[0].startswith("e2e hello [sketch: "))
+
+    (home / ".claude" / "sessions" / "s1.json").unlink()
+    page.wait_for_function("document.getElementById('send').textContent === 'Send'", timeout=10000)
+    page.fill("#text", "to nowhere")
+    page.click("#send")
+    check("closed session: Send says it's gone instead of posting",
+          "gone" in page.inner_text("#status") and len(inbox.messages) == 1)
+    page.fill("#text", "")
+    add_session(home, inbox, "s1", "e2e-one")
+    page.wait_for_function("document.getElementById('send').textContent === 'Send to e2e-one'", timeout=10000)
 
 
 if __name__ == "__main__":

@@ -33,14 +33,41 @@ let hosts = [];     // last /api/sessions result, also used by the image browser
 let selected = null; // {host, id}
 try { selected = JSON.parse(store.get("sketchpad-selected")); } catch {}
 
+function findSession(sel) {
+  const h = sel && hosts.find((x) => x.host === sel.host);
+  const s = h && h.sessions.find((x) => x.id === sel.id);
+  return s ? { host: h, s } : null;
+}
+
+function select(sel) {
+  selected = { host: sel.host, id: sel.id };
+  store.set("sketchpad-selected", JSON.stringify(selected));
+  renderSessions();
+}
+
+function updateSendButton() {
+  const found = findSession(selected);
+  const name = found && (found.s.label || found.s.id);
+  $("send").textContent = found ? `Send to ${name}` : "Send";
+  $("send").title = found ? `${found.host.host} / ${name}` : "";
+}
+
 function renderSessions() {
   const ul = $("sessions");
   ul.innerHTML = "";
+  const note = (message) => {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = message;
+    ul.append(li);
+  };
   for (const h of hosts) {
     const head = document.createElement("li");
     head.className = "hosthead";
     head.textContent = h.online ? h.host : `${h.host} · offline`;
     ul.append(head);
+    if (!h.online) note(h.error ? `Can't reach ${h.host}: ${h.error}` : `Can't reach ${h.host}. Is its helper (and tunnel) running?`);
+    else if (!h.sessions.length) note("No Claude Code sessions running.");
     for (const s of h.sessions) {
       const li = document.createElement("li");
       if (selected && selected.host === h.host && selected.id === s.id) li.classList.add("selected");
@@ -50,15 +77,11 @@ function renderSessions() {
       li.querySelector(".dot").classList.toggle("busy", s.status !== "idle");
       li.querySelector(".name").append(s.label || s.id);
       li.querySelector(".sub").textContent = s.via ? `${dir} · ${s.status}` : "not reachable";
-      li.onclick = () => {
-        if (!s.via) return;
-        selected = { host: h.host, id: s.id };
-        store.set("sketchpad-selected", JSON.stringify(selected));
-        renderSessions();
-      };
+      li.onclick = () => { if (s.via) select({ host: h.host, id: s.id }); };
       ul.append(li);
     }
   }
+  updateSendButton();
 }
 
 function refreshSessions() {
@@ -224,7 +247,8 @@ const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(
 let pendingSend = null;
 
 $("send").onclick = async () => {
-  if (!selected) return setStatus("Pick a session on the left first.", true);
+  const found = findSession(selected);
+  if (!found) return setStatus(selected ? "That session is gone. Pick another on the left." : "Pick a session on the left first.", true);
   const text = $("text").value.trim();
   $("send").disabled = true;
   try {
@@ -240,7 +264,8 @@ $("send").onclick = async () => {
       body: JSON.stringify({ ...req, send_id: pendingSend.id }),
     });
     pendingSend = null;
-    setStatus(`${r.duplicate ? "Already sent" : "Sent"} ✓ ${new Date().toLocaleTimeString()}`);
+    const name = found.s.label || found.s.id;
+    setStatus(`${r.duplicate ? "Already sent to" : "Sent to"} ${name} via ${r.via === "socket" ? "inbox" : r.via} ✓ ${new Date().toLocaleTimeString()}`);
     $("text").value = "";
     excalidraw.resetScene();
   } catch (e) {

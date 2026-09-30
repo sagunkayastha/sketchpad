@@ -1,6 +1,11 @@
 :root {
   --bg: #1e1f22; --panel: #2b2d31; --fg: #e6e6e6; --muted: #9aa0a6;
   --accent: #4f8cff; --busy: #e5a50a; --idle: #3fb950;
+  --border: #444; --selected: #3a3d44; --divider: #232428; --grip: #555; --error: #ff6b6b;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #f3f4f6; --panel: #ffffff; --fg: #1f2328; --muted: #656d76;
+    --border: #d0d7de; --selected: #e8f0fe; --divider: #e5e7eb; --grip: #b0b7c0; --error: #cf222e; }
 }
 html, body {
   margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
@@ -9,25 +14,26 @@ html, body {
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 #sidebar button, #sendrow button, #browser button, #login button { touch-action: manipulation; font: inherit; color: var(--fg);
-  background: var(--panel); border: 1px solid #444; border-radius: 8px; padding: 8px 12px; }
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; min-height: 44px; }
 
 #app { display: flex; height: 100vh; height: 100dvh; }
 
-#sidebar { width: 12%; min-width: 80px; overflow-y: auto; background: var(--panel); display: flex; flex-direction: column; }
+#sidebar { width: 18%; min-width: 150px; overflow-y: auto; background: var(--panel); display: flex; flex-direction: column; }
 #logout { margin: auto 8px 8px; font-size: 12px; padding: 6px; }
 #host { padding: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
 #sessions { list-style: none; margin: 0; padding: 0; }
 #sessions li.hosthead { padding: 12px 10px 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; cursor: default; }
-#sessions li { padding: 10px; border-left: 3px solid transparent; cursor: pointer; }
-#sessions li.selected { background: #3a3d44; border-left-color: var(--accent); }
+#sessions li { min-height: 44px; box-sizing: border-box; padding: 10px 12px; border-left: 3px solid transparent; cursor: pointer; }
+#sessions li.empty { min-height: 0; padding: 4px 12px 10px; color: var(--muted); font-size: 12px; cursor: default; }
+#sessions li.selected { background: var(--selected); border-left-color: var(--accent); }
 #sessions li.disabled { opacity: .45; }
 #sessions .name { font-weight: 600; word-break: break-all; }
 #sessions .sub { color: var(--muted); font-size: 11px; word-break: break-all; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--idle); }
 .dot.busy { background: var(--busy); }
 
-#divider { width: 12px; flex: none; cursor: col-resize; touch-action: none; background: #111;
-  background-image: linear-gradient(#555, #555); background-size: 2px 40px;
+#divider { width: 12px; flex: none; cursor: col-resize; touch-action: none; background: var(--divider);
+  background-image: linear-gradient(var(--grip), var(--grip)); background-size: 2px 40px;
   background-repeat: no-repeat; background-position: center; }
 
 #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -37,16 +43,17 @@ html, body {
 .excalidraw input, .excalidraw textarea { -webkit-user-select: text; user-select: text; }
 #sendrow { display: flex; gap: 8px; padding: 8px; }
 #text { flex: 1; resize: none; font: inherit; padding: 8px; border-radius: 8px;
-  border: 1px solid #444; background: var(--panel); color: var(--fg); -webkit-user-select: text; user-select: text; }
-#send { background: var(--accent); border-color: var(--accent); padding: 8px 22px; font-weight: 600; }
+  border: 1px solid var(--border); background: var(--panel); color: var(--fg); -webkit-user-select: text; user-select: text; }
+#sendrow #send { background: var(--accent); border-color: var(--accent); padding: 8px 22px; font-weight: 600;
+  color: #fff; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #status { padding: 0 8px 8px; min-height: 18px; color: var(--muted); font-size: 13px; }
-#status.error { color: #ff6b6b; }
+#status.error { color: var(--error); }
 
 #login { max-width: 320px; margin: 18vh auto 0; padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
 #login h1 { font-size: 22px; margin: 0 0 8px; }
-#login input { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid #444;
+#login input { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--panel); color: var(--fg); -webkit-user-select: text; user-select: text; }
-#login #submit { background: var(--accent); border-color: var(--accent); font-weight: 600; }
+#login #submit { background: var(--accent); border-color: var(--accent); font-weight: 600; color: #fff; }
 
 #browser { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, .5); }
@@ -54,10 +61,10 @@ html, body {
 #browser .panel { width: min(720px, 92vw); height: min(560px, 80vh); display: flex; flex-direction: column; gap: 8px;
   padding: 12px; border-radius: 12px; background: var(--panel); }
 #browser .row { display: flex; gap: 8px; }
-#browser select, #browser-path { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid #444;
+#browser select, #browser-path { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); }
 #browser-path { flex: 1; min-width: 0; -webkit-user-select: text; user-select: text; }
 #browser-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
-#browser-list li { padding: 10px; border-bottom: 1px solid #3a3d44; cursor: pointer; word-break: break-all; }
+#browser-list li { padding: 10px; border-bottom: 1px solid var(--selected); cursor: pointer; word-break: break-all; }
 #browser-list li.dir { font-weight: 600; }
 #browser-status { min-height: 18px; color: var(--muted); font-size: 13px; }
