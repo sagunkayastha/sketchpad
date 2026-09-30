@@ -17,10 +17,15 @@ image on its next turn.
 - **Excalidraw board**: pen with Apple Pencil pressure, shapes, arrows, text, eraser,
   undo/redo, zoom and pan. No build step: Excalidraw and React load from esm.sh.
 - **Session list**: every running Claude Code session on your machines, with its
-  working directory and busy/idle state. Tap one to target it.
+  working directory and busy/idle state. Tap one to target it; **Send** names the destination.
+- **Recent and History**: quick picks for recently used sessions. History keeps the last 20
+  sends on this device, with thumbnails; tap one to reopen its text and sketch for editing.
 - **Open a plot from the machine**: the **Image…** button browses folders on the
   session's machine, drops a PNG/JPEG/SVG onto the board (locked, scaled to fit), and
-  you annotate on top of it. Handy for "fix this part of the figure".
+  you annotate on top of it. Large raster sources shrink on insert; sketches export
+  at up to 2× resolution. Handy for "fix this part of the figure".
+- **iPad layout**: touch-sized session rows and buttons; light or dark chrome follows
+  the device theme while the drawing board stays white.
 - **Multiple machines**: one *hub* serves the page; *helpers* on other machines list and
   deliver to their own sessions. Sketches are saved where the session runs.
 - **Login**: username/password with scrypt hashing and a signed 30-day cookie, since the
@@ -49,6 +54,10 @@ reads those, checks the pid is alive, and picks one of two ways in:
 
 The socket is an internal Claude Code interface (present in 2.1.x). If a future
 version changes it, tmux and kitty keep working.
+The socket does not acknowledge delivery, so “Sent to X via inbox” means the message
+was handed to the socket. If tmux or kitty types a message but cannot press Enter,
+sketchpad reports that it was typed but not submitted and asks you to press Enter
+in that terminal.
 
 ## Requirements
 
@@ -123,8 +132,11 @@ the hub needs it only when `--remote` is used.
 ```sh
 PYTHONPATH=. python3 -m unittest discover -s tests   # unit tests, stdlib only
 pip install playwright && playwright install chrome
-python3 tests/e2e_ui.py                              # browser test against a real hub
+python3 tests/e2e_ui.py                              # browser test against an isolated hub
 ```
+
+The browser test creates a fake Claude session behind a Unix socket and isolates
+`XDG_RUNTIME_DIR` and `TMUX_TMPDIR`, so it never types into real terminals.
 
 Layout:
 
@@ -141,9 +153,9 @@ Layout:
 
 - Outside tmux and kitty the message is framed as a peer message, not user input (see above).
 - The Excalidraw eraser deletes whole elements, not parts of a stroke (upstream behaviour).
-- Very large images are kept at full resolution on the board; a huge photo can make
-  the iPad tab sluggish.
-- Sketches accumulate on disk; delete `sketches/` when you like.
+- SVG sources keep their original data; very complex SVGs can still make a tab sluggish.
+- Sketches accumulate on disk. Deleting one leaves its History row, but that sketch
+  can no longer be reopened.
 
 ## License
 
