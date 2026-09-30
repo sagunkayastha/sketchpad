@@ -27,6 +27,26 @@ def pid_alive(pid):
     return True
 
 
+def proc_start(pid, proc=Path("/proc")):
+    """Read process start time from field 22 of /proc/<pid>/stat."""
+    try:
+        text = (proc / str(pid) / "stat").read_text()
+    except OSError:
+        return None
+    # The command in field 2 may contain spaces and closing parentheses.
+    try:
+        return text.rsplit(")", 1)[1].split()[19]
+    except IndexError:
+        return None
+
+
+def same_process(session, proc=Path("/proc")):
+    start = proc_start(session["pid"], proc)
+    if start is None or "procStart" not in session:
+        return pid_alive(session["pid"])
+    return start == str(session["procStart"])
+
+
 def read_sessions(sessions_dir=SESSIONS_DIR):
     """Claude Code writes one <pid>.json per running session; files can outlive a crash."""
     out = []
@@ -35,7 +55,7 @@ def read_sessions(sessions_dir=SESSIONS_DIR):
             data = json.loads(f.read_text())
         except (OSError, ValueError):
             continue
-        if isinstance(data.get("pid"), int) and pid_alive(data["pid"]):
+        if isinstance(data.get("pid"), int) and same_process(data):
             out.append(data)
     return out
 

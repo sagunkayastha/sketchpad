@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import sessions
 
@@ -106,6 +107,44 @@ class ReadSessionsTest(unittest.TestCase):
             (d / "3.json").write_text("{not json")
             ids = [s["sessionId"] for s in sessions.read_sessions(d)]
         self.assertEqual(ids, ["alive"])
+
+    def test_live_pid_with_wrong_start_is_skipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "1.json").write_text(json.dumps({"pid": os.getpid(), "sessionId": "recycled", "procStart": "1"}))
+            self.assertEqual(sessions.read_sessions(Path(d)), [])
+
+
+class ProcStartTest(unittest.TestCase):
+    def fake_proc(self, d, pid, start):
+        rest = ["S"] + [str(i) for i in range(4, 53)]
+        rest[19] = start
+        (d / str(pid)).mkdir()
+        (d / str(pid) / "stat").write_text(f"{pid} (a b) c) " + " ".join(rest) + "\n")
+
+    def test_reads_field_22_even_with_parens_in_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            self.fake_proc(d, 7, "123")
+            self.assertEqual(sessions.proc_start(7, d), "123")
+
+    def test_missing_pid_is_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(sessions.proc_start(7, Path(d)))
+
+    def test_same_process_compares_start_time(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            self.fake_proc(d, 7, "123")
+            self.assertTrue(sessions.same_process({"pid": 7, "procStart": "123"}, d))
+            self.assertFalse(sessions.same_process({"pid": 7, "procStart": "999"}, d))
+
+    def test_falls_back_to_pid_check(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(sessions, "pid_alive", return_value=True) as alive:
+            d = Path(d)
+            self.fake_proc(d, 7, "123")
+            self.assertTrue(sessions.same_process({"pid": 7}, d))
+            self.assertTrue(sessions.same_process({"pid": 8, "procStart": "1"}, d))
+            self.assertEqual(alive.call_count, 2)
 
 
 if __name__ == "__main__":
