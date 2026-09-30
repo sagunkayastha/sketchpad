@@ -365,6 +365,43 @@ $("browser-path").onkeydown = (e) => {
   else browse(path);
 };
 
+// ---- screenshot the machine you're sitting at (flameshot runs there) ----
+const SCREEN_KEY = "sketchpad-screen-host";
+let shooting = false;
+
+$("open-screen").onclick = () => {
+  const menu = $("screen-menu");
+  if (!menu.hidden) { menu.hidden = true; return; }
+  const picker = $("screen-host");
+  picker.innerHTML = "";
+  for (const h of hosts) picker.append(new Option(h.online ? h.host : `${h.host} (offline)`, h.host));
+  const has = (name) => hosts.some((h) => h.host === name);
+  const saved = store.get(SCREEN_KEY);
+  if (has(saved)) picker.value = saved;
+  else if (selected && has(selected.host)) picker.value = selected.host;
+  menu.hidden = false;
+};
+
+async function screenshot(mode) {
+  if (shooting) return;
+  shooting = true;
+  const host = $("screen-host").value;
+  store.set(SCREEN_KEY, host);
+  $("screen-menu").hidden = true;
+  setStatus(mode === "box" ? `Drag a box on ${host}'s screen, then press Enter (Esc cancels)…` : `Capturing ${host}'s screen…`);
+  await new Promise((r) => setTimeout(r, 200)); // let the menu disappear before flameshot grabs the screen
+  try {
+    await insertImage(await api(`/api/screenshot?${new URLSearchParams({ host, mode })}`));
+    setStatus("");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    shooting = false;
+  }
+}
+$("shot-full").onclick = () => screenshot("full");
+$("shot-box").onclick = () => screenshot("box");
+
 // ---- send ----
 // The LAN page is plain HTTP, so crypto.randomUUID is unavailable.
 const makeId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);

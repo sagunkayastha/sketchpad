@@ -22,6 +22,7 @@ from pathlib import Path
 
 import auth
 import files
+import screen
 import sessions
 
 ROOT = Path(__file__).resolve().parent
@@ -31,6 +32,18 @@ HELPER_TOKEN_FILE = Path.home() / ".config" / "sketchpad" / "helper-token"
 COOKIE = "sp_session"
 MAX_BODY = 25 * 1024 * 1024
 CONTENT_TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
+# Routes answered by whichever machine the request is for; the hub forwards them to helpers.
+# Looked up at call time, so tests that patch screen.capture can never reach the real screen.
+MACHINE_ROUTES = {"/api/ls": lambda path: files.list_dir(path),
+                  "/api/image": lambda path: files.read_image(path),
+                  "/api/screenshot": lambda mode: screen.capture(mode)}
+HELPER_TIMEOUTS = {"/api/ls": 5, "/api/image": 20, "/api/screenshot": 130}  # a box screenshot waits for a person
+
+
+def route_arg(route, query):
+    """(name, value) of the one argument a machine route takes: a mode for screenshots, else a path."""
+    name = "mode" if route == "/api/screenshot" else "path"
+    return name, query.get(name, [""])[0]
 
 
 def public(s):
@@ -133,7 +146,7 @@ class HubHandler(BaseHandler):
                 return
             if url.path == "/api/sessions":
                 self.reply(200, {"hosts": self.all_hosts()})
-            elif url.path in ("/api/ls", "/api/image"):
+            elif url.path in MACHINE_ROUTES:
                 self.reply(*self.files_request(url.path, urllib.parse.parse_qs(url.query)))
             else:
                 self.reply(404, {"error": "not found"})
@@ -146,14 +159,14 @@ class HubHandler(BaseHandler):
 
     def files_request(self, route, query):
         host = query.get("host", [self.host])[0]
-        path = query.get("path", [""])[0]
+        name, arg = route_arg(route, query)
         if host == self.host:
-            return files.call(files.list_dir if route == "/api/ls" else files.read_image, path)
+            return files.call(MACHINE_ROUTES[route], arg)
         if host not in self.remotes:
             return 404, {"error": f"unknown host {host}"}
         try:
-            return call_helper(self.remotes[host], f"{route}?{urllib.parse.urlencode({'path': path})}",
-                               self.helper_token, timeout=5 if route == "/api/ls" else 20)
+            return call_helper(self.remotes[host], f"{route}?{urllib.parse.urlencode({name: arg})}",
+                               self.helper_token, timeout=HELPER_TIMEOUTS[route])
         except (OSError, ValueError):
             return 502, {"error": f"{host} is offline"}
 
@@ -224,16 +237,15 @@ class HelperHandler(BaseHandler):
 
     def do_GET(self):
         url = urllib.parse.urlsplit(self.path)
-        routes = {"/api/list": None, "/api/ls": files.list_dir, "/api/image": files.read_image}
-        if url.path not in routes:
+        if url.path != "/api/list" and url.path not in MACHINE_ROUTES:
             self.reply(404, {"error": "not found"})
         elif not self.authorized():
             return
         elif url.path == "/api/list":
             self.reply(200, {"sessions": [public(s) for s in sessions.list_sessions()]})
         else:
-            path = urllib.parse.parse_qs(url.query).get("path", [""])[0]
-            self.reply(*files.call(routes[url.path], path))
+            _, arg = route_arg(url.path, urllib.parse.parse_qs(url.query))
+            self.reply(*files.call(MACHINE_ROUTES[url.path], arg))
 
     def do_POST(self):
         if self.path != "/api/deliver":

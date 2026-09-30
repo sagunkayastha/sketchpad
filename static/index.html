@@ -32,11 +32,17 @@
     <div id="recent" hidden></div>
     <div id="sendrow">
       <button id="open-image">Image…</button>
+      <button id="open-screen" title="Screenshot the machine you're sitting at (flameshot)">Screen ▾</button>
       <button id="open-history">History</button>
       <textarea id="text" rows="1" placeholder="Message (optional)"></textarea>
       <button id="send">Send</button>
     </div>
     <div id="status"></div>
+    <div id="screen-menu" hidden>
+      <select id="screen-host" title="Machine to capture: the one you're sitting at"></select>
+      <button id="shot-full">Full screen</button>
+      <button id="shot-box">Select box</button>
+    </div>
   </main>
 </div>
 <div id="browser" hidden>

@@ -13,7 +13,7 @@ html, body {
   font: 15px -apple-system, system-ui, sans-serif;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
-#sidebar button, #sendrow button, #browser button, #history button, #login button { touch-action: manipulation; font: inherit; color: var(--fg);
+#sidebar button, #sendrow button, #browser button, #history button, #screen-menu button, #login button { touch-action: manipulation; font: inherit; color: var(--fg);
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; min-height: 44px; }
 
 #app { display: flex; height: 100vh; height: 100dvh; }
@@ -36,7 +36,7 @@ html, body {
   background-image: linear-gradient(var(--grip), var(--grip)); background-size: 2px 40px;
   background-repeat: no-repeat; background-position: center; }
 
-#main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
 #board { flex: 1; min-height: 0; position: relative; }
 #board > .excalidraw { position: absolute; inset: 0; }
 #recent { display: flex; gap: 8px; padding: 8px 8px 0; overflow-x: auto; }
@@ -79,3 +79,9 @@ html, body {
 #history-list img { width: 80px; height: 60px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
 #history-list .sub { color: var(--muted); font-size: 12px; }
 #history-status { min-height: 18px; color: var(--muted); font-size: 13px; }
+
+#screen-menu { position: absolute; left: 8px; bottom: 64px; z-index: 20; display: flex; gap: 8px; padding: 8px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); }
+#screen-menu[hidden] { display: none; }
+#screen-menu select { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--fg); }

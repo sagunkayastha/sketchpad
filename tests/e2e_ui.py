@@ -87,9 +87,17 @@ def main():
     (home / "my plots").mkdir()
     make_png(home / "my plots" / "wide plot.png", 3000, 1500)
     make_png(home / "my plots" / "huge plot.png", 5000, 2500)
+    # A fake flameshot first on the hub's PATH, so the screenshot checks never capture the real screen.
+    make_png(home / "fake-screen.png", 640, 360)
+    (home / "bin").mkdir()
+    fake = home / "bin" / "flameshot"
+    fake.write_text('#!/bin/sh\necho "$@" >> "$HOME/flameshot-args"\n'
+                    '[ -f "$HOME/cancel" ] && exit 0\ncat "$HOME/fake-screen.png"\n')
+    fake.chmod(0o755)
     inbox = FakeInbox(home / "inbox.sock")
     env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
-    env.update(HOME=str(home), XDG_RUNTIME_DIR=str(home), TMUX_TMPDIR=str(home))
+    env.update(HOME=str(home), XDG_RUNTIME_DIR=str(home), TMUX_TMPDIR=str(home),
+               PATH=f"{home / 'bin'}:{os.environ['PATH']}")
     hub = subprocess.Popen([sys.executable, "server.py", "serve", "--bind", "127.0.0.1", "--port", str(PORT)],
                            cwd=ROOT, env=env)
     try:
@@ -106,6 +114,7 @@ def main():
             page.on("pageerror", lambda e: errors.append(str(e)))
             run_checks(page, home)
             run_session_checks(page, home, inbox)
+            run_screen_checks(page, home)
             check("no page errors", not errors or print(errors))
             browser.close()
     finally:
@@ -286,6 +295,37 @@ def run_session_checks(page, home, inbox):
     entry = page.evaluate("JSON.parse(localStorage.getItem('sketchpad-history'))[0]")
     check("switching sessions during send keeps History on original destination",
           entry["id"] == "s1" and entry["text"] == "delayed A")
+
+
+def run_screen_checks(page, home):
+    page.evaluate("window.sketchpad.api.resetScene()")
+    page.click("#open-screen")
+    page.wait_for_selector("#screen-menu:not([hidden])")
+    check("screen menu defaults to the selected session's machine",
+          page.input_value("#screen-host") == page.evaluate("JSON.parse(localStorage.getItem('sketchpad-selected')).host"))
+    page.click("#shot-full")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 1", timeout=10000)
+    size = page.evaluate("""async () => {
+      const f = Object.values(window.sketchpad.api.getFiles()).pop();
+      const i = new Image(); i.src = f.dataURL; await i.decode(); return [i.naturalWidth, i.naturalHeight];
+    }""")
+    check("Full screen puts the (fake) screenshot on the board", size == [640, 360])
+    check("menu is hidden after capturing", page.locator("#screen-menu").is_hidden())
+
+    page.click("#open-screen")
+    page.click("#shot-box")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 2", timeout=10000)
+    args = (home / "flameshot-args").read_text().splitlines()
+    check("Full screen runs 'flameshot full', Select box runs 'flameshot gui'",
+          args == ["full --raw", "gui --raw"])
+
+    (home / "cancel").touch()
+    page.click("#open-screen")
+    page.click("#shot-box")
+    page.wait_for_function("document.getElementById('status').textContent.includes('cancelled')", timeout=10000)
+    check("Esc in flameshot shows 'cancelled' and adds nothing",
+          page.evaluate("window.sketchpad.api.getSceneElements().length") == 2)
+    page.evaluate("window.sketchpad.api.resetScene()")
 
 
 if __name__ == "__main__":

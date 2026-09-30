@@ -25,6 +25,9 @@ image on its next turn.
   session's machine, drops a PNG/JPEG/SVG onto the board (locked, scaled to fit), and
   you annotate on top of it. Large raster sources shrink on insert; sketches export
   at up to 2× resolution. Handy for "fix this part of the figure".
+- **Screenshot the machine you're at**: **Screen ▾** → *Full screen* (all monitors) or
+  *Select box* (flameshot's own drag-a-box overlay on that screen; Enter to take it, Esc
+  to cancel). The shot lands on the board like an opened image.
 - **iPad layout**: touch-sized session rows and buttons; light or dark chrome follows
   the device theme while the drawing board stays white.
 - **Multiple machines**: one *hub* serves the page; *helpers* on other machines list and
@@ -64,6 +67,8 @@ in that terminal.
 ## Requirements
 
 - Python 3.9+ (no packages needed to run)
+- Optional: [flameshot](https://flameshot.org) on the machines whose screen you want to
+  capture (works on GNOME Wayland; `grim` does not).
 - Claude Code 2.1 or newer, in any terminal. Sessions inside **tmux** or **kitty** get
   the message typed in; everything else goes through the session's inbox socket.
 - For kitty: add to `kitty.conf` and restart kitty
@@ -147,6 +152,7 @@ Layout:
 | `server.py` | HTTP server: hub and helper roles, routes, CLI |
 | `sessions.py` | find Claude Code sessions, pick tmux pane / kitty window / inbox socket, deliver text |
 | `files.py` | folder listing and image reading for the **Image…** browser |
+| `screen.py` | screenshots with flameshot for the **Screen** button |
 | `auth.py` | password hashing and signed cookies |
 | `static/` | the page: `index.html`, `app.js` (Excalidraw mount, session list, send), `login.html`, `style.css` |
 | `deploy/` | systemd units, tunnel script, Tailscale sidecar |
