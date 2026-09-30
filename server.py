@@ -161,10 +161,14 @@ class HubHandler(BaseHandler):
                   "sessions": [public(s) for s in sessions.list_sessions()]}]
         for name, url in self.remotes.items():
             try:
-                _, body = call_helper(url, "/api/list", self.helper_token)
-                hosts.append({"host": name, "online": True, "sessions": body.get("sessions", [])})
+                status, body = call_helper(url, "/api/list", self.helper_token)
             except (OSError, ValueError):
                 hosts.append({"host": name, "online": False, "sessions": []})
+                continue
+            if status != 200:
+                hosts.append({"host": name, "online": False, "error": body.get("error", f"HTTP {status}"), "sessions": []})
+            else:
+                hosts.append({"host": name, "online": True, "sessions": body.get("sessions", [])})
         return hosts
 
     def do_POST(self):
@@ -255,9 +259,12 @@ def set_password():
 
 def load_helper_token():
     try:
-        return HELPER_TOKEN_FILE.read_text().strip()
+        token = HELPER_TOKEN_FILE.read_text().strip()
     except FileNotFoundError:
         sys.exit(f"Missing {HELPER_TOKEN_FILE} (shared secret between hub and helper).")
+    if not token:
+        sys.exit(f"{HELPER_TOKEN_FILE} is empty. Create it with: openssl rand -hex 32 > {HELPER_TOKEN_FILE}")
+    return token
 
 
 def main():

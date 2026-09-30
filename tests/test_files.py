@@ -79,5 +79,14 @@ class ReadImageTest(unittest.TestCase):
         self.assertEqual(files.call(files.read_image, str(self.d / "gone.png"))[0], 404)
 
 
+class ImageDirTest(unittest.TestCase):
+    def test_directory_named_like_an_image_is_400(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "plot.png").mkdir()
+            status, body = files.call(files.read_image, str(Path(d) / "plot.png"))
+        self.assertEqual(status, 400)
+        self.assertIn("not a file", body["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

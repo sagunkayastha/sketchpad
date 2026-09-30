@@ -92,6 +92,15 @@ class FileRoutesTest(unittest.TestCase):
         status, _ = self.get(self.helper, f"/api/ls?path={self.d}", {"X-Helper-Token": "wrong"})
         self.assertEqual(status, 401)
 
+    def test_helper_error_shows_offline_with_reason(self):
+        with mock.patch.object(server.sessions, "list_sessions", return_value=[]), \
+             mock.patch.object(server.HubHandler, "helper_token", "wrong"):
+            status, body = self.hub_get("/api/sessions")
+        remote = next(h for h in body["hosts"] if h["host"] == "remote")
+        self.assertEqual(status, 200)
+        self.assertFalse(remote["online"])
+        self.assertIn("helper token", remote["error"])
+
 
 class DeliverLocalTest(unittest.TestCase):
     def setUp(self):
@@ -145,6 +154,15 @@ class DeliverLocalTest(unittest.TestCase):
         status, body = server.deliver_local(self.req())
         self.assertEqual((status, body["partial"]), (502, True))
         self.assertEqual(len(list(self.sketches.iterdir())), 1)
+
+class HelperTokenTest(unittest.TestCase):
+    def test_empty_token_file_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "helper-token"
+            f.write_text("\n")
+            with mock.patch.object(server, "HELPER_TOKEN_FILE", f), self.assertRaises(SystemExit):
+                server.load_helper_token()
+
 
 if __name__ == "__main__":
     unittest.main()

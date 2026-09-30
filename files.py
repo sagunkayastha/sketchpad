@@ -45,6 +45,8 @@ def read_image(path):
     mime = IMAGE_TYPES.get(p.suffix.lower())
     if not mime:
         raise ValueError(f"not an image: {p.name}")
+    if p.is_dir():
+        raise ValueError(f"not a file: {p.name}")
     if p.stat().st_size > MAX_IMAGE:
         raise ValueError(f"image larger than {MAX_IMAGE // 2**20} MB: {p.name}")
     data = base64.b64encode(p.read_bytes()).decode()
