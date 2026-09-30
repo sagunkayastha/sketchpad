@@ -1,7 +1,14 @@
-"""Discover running Claude Code sessions and deliver messages to them through tmux or kitty."""
+"""Discover running Claude Code sessions and deliver messages to them.
+
+Delivery goes through the terminal wrapper (tmux pane or kitty window) when there is one, so the
+message lands as if typed. Otherwise it goes through Claude Code's own per-session inbox socket,
+which works in any terminal (VS Code, Alacritty, plain ssh) but shows up as a peer message.
+"""
 import glob
+import hashlib
 import json
 import os
+import socket
 import stat
 import subprocess
 import time
@@ -83,6 +90,20 @@ def kitty_windows():
     return windows
 
 
+def socket_target(session, sessions_dir=SESSIONS_DIR):
+    """Claude Code's inbox: the socket path from the session file plus the peer token from its key file."""
+    sock = session.get("messagingSocketPath")
+    if not sock:
+        return None
+    # Key file name is <pid>.<sha256 of the normalized socket path>.key, next to the session file.
+    digest = hashlib.sha256(os.path.abspath(sock).encode()).hexdigest()
+    try:
+        token = json.loads((sessions_dir / f"{session['pid']}.{digest}.key").read_text())["peerToken"]
+    except (OSError, ValueError, KeyError):
+        return None
+    return {"kind": "socket", "socket": sock, "token": token, "label": None}
+
+
 def find_target(pid, ppids, targets):
     # Nearest ancestor wins: claude in tmux inside kitty goes through tmux.
     while pid and pid > 1:
@@ -97,7 +118,7 @@ def list_sessions():
     targets = {**kitty_windows(), **tmux_panes()}
     result = []
     for s in read_sessions():
-        target = find_target(s["pid"], ppids, targets)
+        target = find_target(s["pid"], ppids, targets) or socket_target(s)
         result.append({
             "id": s.get("sessionId"),
             "name": s.get("name"),
@@ -119,7 +140,15 @@ def build_message(text, image_path):
 
 
 def deliver(target, message):
-    if target["kind"] == "tmux":
+    if target["kind"] == "socket":
+        # Newline-delimited JSON: authenticate, then a user message. Content must be a plain string.
+        lines = [{"type": "auth", "token": target["token"]},
+                 {"type": "user", "message": {"role": "user", "content": message}}]
+        with socket.socket(socket.AF_UNIX) as c:
+            c.settimeout(5)
+            c.connect(target["socket"])
+            c.sendall("".join(json.dumps(line) + "\n" for line in lines).encode())
+    elif target["kind"] == "tmux":
         subprocess.run(["tmux", "send-keys", "-t", target["pane"], "-l", "--", message], check=True)
         time.sleep(0.3)  # let Claude Code ingest the text before submitting
         subprocess.run(["tmux", "send-keys", "-t", target["pane"], "Enter"], check=True)

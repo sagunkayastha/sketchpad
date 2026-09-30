@@ -34,19 +34,27 @@ image on its next turn.
 ## How delivery works
 
 Claude Code writes `~/.claude/sessions/<pid>.json` for each running session. sketchpad
-reads those, checks the pid is alive, then walks up the process tree to the nearest
-terminal wrapper it can type into:
+reads those, checks the pid is alive, and picks one of two ways in:
 
-- a **tmux** pane, delivered with `tmux send-keys`, or
-- a **kitty** window, delivered with `kitty @ send-text`.
+1. **Typed into the terminal** when the session runs in a **tmux** pane
+   (`tmux send-keys`) or a **kitty** window (`kitty @ send-text`). The message arrives
+   exactly as if you had typed it.
+2. **Claude Code's own inbox socket** otherwise. Every session listens on a Unix socket
+   (`messagingSocketPath` in its session file) with a per-session key next to it. This
+   works in any terminal: VS Code, Alacritty, WezTerm, GNOME Terminal, a plain ssh
+   session. Claude Code shows the message as coming from another session ("Another
+   Claude session sent a message"), so the model treats it as a teammate's request
+   rather than as your own typed prompt. For sketches and questions that makes no
+   practical difference.
 
-Sessions running in another terminal are listed but marked *not reachable*. Run Claude
-inside tmux (or kitty with remote control on) to make it a target.
+The socket is an internal Claude Code interface (present in 2.1.x). If a future
+version changes it, tmux and kitty keep working.
 
 ## Requirements
 
 - Python 3.9+ (no packages needed to run)
-- Claude Code sessions running inside **tmux** or **kitty**
+- Claude Code 2.1 or newer, in any terminal. Sessions inside **tmux** or **kitty** get
+  the message typed in; everything else goes through the session's inbox socket.
 - For kitty: add to `kitty.conf` and restart kitty
 
   ```
@@ -123,7 +131,7 @@ Layout:
 | File | Purpose |
 | --- | --- |
 | `server.py` | HTTP server: hub and helper roles, routes, CLI |
-| `sessions.py` | find Claude Code sessions, map pid to tmux pane / kitty window, deliver text |
+| `sessions.py` | find Claude Code sessions, pick tmux pane / kitty window / inbox socket, deliver text |
 | `files.py` | folder listing and image reading for the **Image…** browser |
 | `auth.py` | password hashing and signed cookies |
 | `static/` | the page: `index.html`, `app.js` (Excalidraw mount, session list, send), `login.html`, `style.css` |
@@ -131,7 +139,7 @@ Layout:
 
 ## Limitations
 
-- Only tmux and kitty are supported as delivery targets.
+- Outside tmux and kitty the message is framed as a peer message, not user input (see above).
 - The Excalidraw eraser deletes whole elements, not parts of a stroke (upstream behaviour).
 - Very large images are kept at full resolution on the board; a huge photo can make
   the iPad tab sluggish.

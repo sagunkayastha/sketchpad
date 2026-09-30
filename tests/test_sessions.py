@@ -1,6 +1,9 @@
+import hashlib
 import json
 import os
+import socket
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -22,6 +25,52 @@ class FindTargetTest(unittest.TestCase):
     def test_none_when_unreachable(self):
         ppids = {300: 200, 200: 1}
         self.assertIsNone(sessions.find_target(300, ppids, {100: {"kind": "tmux"}}))
+
+
+class SocketTargetTest(unittest.TestCase):
+    def test_reads_peer_token_from_key_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            sock = "/run/user/1000/cc-socks/42.sock"
+            digest = hashlib.sha256(sock.encode()).hexdigest()
+            (d / f"42.{digest}.key").write_text(json.dumps({"peerToken": "ab" * 16}))
+            target = sessions.socket_target({"pid": 42, "messagingSocketPath": sock}, d)
+        self.assertEqual(target, {"kind": "socket", "socket": sock, "token": "ab" * 16, "label": None})
+
+    def test_none_without_socket_or_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(sessions.socket_target({"pid": 42}, Path(d)))
+            self.assertIsNone(sessions.socket_target({"pid": 42, "messagingSocketPath": "/x.sock"}, Path(d)))
+
+
+class DeliverSocketTest(unittest.TestCase):
+    def test_sends_auth_then_user_message(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "s.sock")
+            srv = socket.socket(socket.AF_UNIX)
+            srv.bind(path)
+            srv.listen(1)
+            got = []
+
+            def accept():
+                conn, _ = srv.accept()
+                with conn:
+                    buf = b""
+                    while b"\n" not in buf or buf.count(b"\n") < 2:
+                        chunk = conn.recv(4096)
+                        if not chunk:
+                            break
+                        buf += chunk
+                    got.append(buf)
+
+            t = threading.Thread(target=accept, daemon=True)
+            t.start()
+            sessions.deliver({"kind": "socket", "socket": path, "token": "t0k"}, "hi [sketch: /a.png]")
+            t.join(5)
+            srv.close()
+        lines = [json.loads(l) for l in got[0].decode().splitlines()]
+        self.assertEqual(lines[0], {"type": "auth", "token": "t0k"})
+        self.assertEqual(lines[1], {"type": "user", "message": {"role": "user", "content": "hi [sketch: /a.png]"}})
 
 
 class ParseKittyLsTest(unittest.TestCase):
