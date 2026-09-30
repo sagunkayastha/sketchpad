@@ -1,0 +1,13 @@
+# Helper user service: lists and delivers to this machine's Claude sessions for the hub.
+# Install: cp to ~/.config/systemd/user/ && systemctl --user enable --now sketchpad-helper
+[Unit]
+Description=sketchpad helper
+
+[Service]
+WorkingDirectory=%h/sketchpad
+ExecStart=/usr/bin/python3 server.py helper --bind 127.0.0.1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

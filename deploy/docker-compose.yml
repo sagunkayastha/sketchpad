@@ -1,0 +1,29 @@
+# Optional: reach the hub from outside your home network over Tailscale, with HTTPS.
+#
+# This container joins your tailnet as its own node named "sketchpad", serves HTTPS with a
+# real Tailscale certificate, and proxies to the hub on the host. The hub stays on the host
+# because it needs the host's tmux/kitty and process table; bind it to the docker bridge
+# address (usually 172.17.0.1) so the container can reach it.
+#
+# No auth key: on first start the log prints a login URL; open it while signed in to your
+# tailnet. State in ./state keeps the node logged in across restarts.
+services:
+  sketchpad-tailscale:
+    image: tailscale/tailscale:latest
+    container_name: sketchpad-tailscale
+    hostname: sketchpad
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - TS_HOSTNAME=sketchpad
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=false
+    volumes:
+      - ./state/tailscale:/var/lib/tailscale
+      - ./tailscale-serve.json:/config/serve.json:ro

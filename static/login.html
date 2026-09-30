@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>sketchpad</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<form id="login">
+  <h1>sketchpad</h1>
+  <input id="username" autocomplete="username" autocapitalize="none" placeholder="Username" required>
+  <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
+  <button id="submit">Log in</button>
+  <div id="status"></div>
+</form>
+<script>
+document.getElementById("login").onsubmit = async (e) => {
+  e.preventDefault();
+  const status = document.getElementById("status");
+  status.textContent = "Logging in…";
+  status.className = "";
+  const r = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: document.getElementById("username").value,
+      password: document.getElementById("password").value,
+    }),
+  }).catch(() => null);
+  if (r && r.ok) return location.replace("/");
+  status.textContent = r ? "Wrong username or password." : "Can't reach the server.";
+  status.className = "error";
+};
+</script>
+</body>
+</html>

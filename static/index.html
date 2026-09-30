@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>sketchpad</title>
+<link rel="stylesheet" href="https://esm.sh/@excalidraw/excalidraw@0.18.1/dist/prod/index.css">
+<link rel="stylesheet" href="/style.css">
+<script>window.EXCALIDRAW_ASSET_PATH = "https://esm.sh/@excalidraw/excalidraw@0.18.1/dist/prod/";</script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react/jsx-runtime": "https://esm.sh/react@19.0.0/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div id="host">sessions</div>
+    <ul id="sessions"></ul>
+    <button id="logout">Log out</button>
+  </aside>
+  <div id="divider"></div>
+  <main id="main">
+    <div id="board"></div>
+    <div id="sendrow">
+      <button id="open-image">Image…</button>
+      <textarea id="text" rows="1" placeholder="Message (optional)"></textarea>
+      <button id="send">Send</button>
+    </div>
+    <div id="status"></div>
+  </main>
+</div>
+<div id="browser" hidden>
+  <div class="panel">
+    <div class="row">
+      <select id="browser-host"></select>
+      <input id="browser-path" autocapitalize="none" autocorrect="off" spellcheck="false"
+             placeholder="/path/to/folder or image.png">
+      <button id="browser-close">✕</button>
+    </div>
+    <ul id="browser-list"></ul>
+    <div id="browser-status"></div>
+  </div>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

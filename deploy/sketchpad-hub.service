@@ -1,0 +1,17 @@
+# Hub user service: web UI + login + this machine's sessions, plus any helpers' sessions.
+# Install: cp to ~/.config/systemd/user/ && systemctl --user enable --now sketchpad-hub
+# Tip: `loginctl enable-linger $USER` starts it at boot, without a login.
+[Unit]
+Description=sketchpad hub
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/sketchpad
+# Bind only the interface(s) your tablet can reach (LAN address, Tailscale address, ...). Not 0.0.0.0.
+# Drop --remote if there is no helper machine.
+ExecStart=/usr/bin/python3 server.py serve --bind 192.168.1.10 --remote laptop=http://127.0.0.1:8791
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

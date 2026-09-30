@@ -1,0 +1,16 @@
+# Helper-side user service: reverse SSH tunnel so the hub can reach this machine's helper.
+# Useful when the hub can't reach the helper directly (a laptop on changing networks), so the helper dials out.
+# Install: cp to ~/.config/systemd/user/ && systemctl --user enable --now sketchpad-tunnel
+[Unit]
+Description=sketchpad tunnel to the hub
+After=network-online.target
+
+[Service]
+# An ssh host alias for the hub machine (key-based login, see ~/.ssh/config).
+Environment=SKETCHPAD_HUB=hub
+ExecStart=%h/sketchpad/deploy/tunnel.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
