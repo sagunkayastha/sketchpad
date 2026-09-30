@@ -27,8 +27,12 @@ image on its next turn.
   shrink on insert; sketches export at up to 2× resolution. Handy for "fix this part of
   the figure".
 - **Screenshot the machine you're at**: **Screen ▾** → *Full screen* (all monitors) or
-  *Select box* (flameshot's own drag-a-box overlay on that screen; Enter to take it, Esc
-  to cancel). The shot lands on the board like an opened image.
+  *Select box* (flameshot's own drag-a-box overlay, across every monitor; Enter to take
+  it, Esc to cancel). The shot lands on the board like an opened image.
+- **Paste a screenshot from any OS**: take it with the system tool (Windows **Win+Shift+S**,
+  macOS **Cmd+Ctrl+Shift+4**, GNOME **PrtSc**), click the board and press **Ctrl+V**. No
+  flameshot or helper needed, and it works over plain HTTP. Excalidraw keeps pasted
+  images at most 1440 px wide.
 - **iPad layout**: touch-sized session rows and buttons; light or dark chrome follows
   the device theme while the drawing board stays white.
 - **Multiple machines**: one *hub* serves the page; *helpers* on other machines list and
@@ -68,8 +72,9 @@ in that terminal.
 ## Requirements
 
 - Python 3.9+ (no packages needed to run)
-- Optional: [flameshot](https://flameshot.org) on the machines whose screen you want to
-  capture (works on GNOME Wayland; `grim` does not).
+- Optional: [flameshot](https://flameshot.org) on the machines whose screen the **Screen**
+  button should capture (works on GNOME Wayland, where Select box runs through XWayland so
+  it spans all monitors; `grim` does not). Without it, paste screenshots instead.
 - Claude Code 2.1 or newer, in any terminal. Sessions inside **tmux** or **kitty** get
   the message typed in; everything else goes through the session's inbox socket.
 - For kitty: add to `kitty.conf` and restart kitty
