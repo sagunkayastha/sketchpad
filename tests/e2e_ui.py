@@ -258,6 +258,17 @@ def run_session_checks(page, home, inbox):
     chip.click()
     check("tapping a recent chip selects it", page.inner_text("#send") == "Send to e2e-one")
 
+    page.click("#open-history")
+    page.wait_for_selector("#history:not([hidden])")
+    items = page.locator("#history-list li")
+    check("history lists sends newest first", items.count() >= 2 and "second" in items.nth(0).inner_text())
+    items.filter(has_text="e2e hello").click()
+    page.wait_for_selector("#history", state="hidden")
+    check("reopening puts the sketch back on the board and the text in the box",
+          page.evaluate("window.sketchpad.api.getSceneElements().length") == 1
+          and page.input_value("#text") == "e2e hello")
+    check("reopening selects that session", page.inner_text("#send") == "Send to e2e-one")
+
 
 if __name__ == "__main__":
     main()

@@ -32,6 +32,7 @@
     <div id="recent" hidden></div>
     <div id="sendrow">
       <button id="open-image">Image…</button>
+      <button id="open-history">History</button>
       <textarea id="text" rows="1" placeholder="Message (optional)"></textarea>
       <button id="send">Send</button>
     </div>
@@ -48,6 +49,13 @@
     </div>
     <ul id="browser-list"></ul>
     <div id="browser-status"></div>
+  </div>
+</div>
+<div id="history" hidden>
+  <div class="panel">
+    <div class="row"><strong>History</strong><span class="spacer"></span><button id="history-close">✕</button></div>
+    <ul id="history-list"></ul>
+    <div id="history-status"></div>
   </div>
 </div>
 <script type="module" src="/app.js"></script>

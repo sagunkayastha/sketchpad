@@ -73,6 +73,71 @@ function renderRecent() {
   box.hidden = !box.children.length;
 }
 
+const HISTORY_KEY = "sketchpad-history";
+
+async function thumbnail(dataURL) {
+  const img = new Image();
+  img.src = dataURL;
+  await img.decode();
+  const s = Math.min(1, 160 / img.naturalWidth, 120 / img.naturalHeight);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(img.naturalWidth * s));
+  c.height = Math.max(1, Math.round(img.naturalHeight * s));
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.7);
+}
+
+function addHistory(entry, image) {
+  store.set(HISTORY_KEY, JSON.stringify([{ ...entry, thumb: null }, ...loadList(HISTORY_KEY)].slice(0, 20)));
+  if (!image) return;
+  thumbnail(image).then((thumb) => {
+    const list = loadList(HISTORY_KEY);
+    const found = list.find((e) => e.at === entry.at && e.host === entry.host && e.id === entry.id && e.image === entry.image);
+    if (found) {
+      found.thumb = thumb;
+      store.set(HISTORY_KEY, JSON.stringify(list));
+    }
+  }).catch(() => {});
+}
+
+function openHistory() {
+  const ul = $("history-list");
+  ul.innerHTML = "";
+  const list = loadList(HISTORY_KEY);
+  $("history-status").textContent = list.length ? "" : "Nothing sent from this device yet.";
+  for (const e of list) {
+    const li = document.createElement("li");
+    if (e.thumb) li.append(Object.assign(new Image(), { src: e.thumb }));
+    const meta = document.createElement("div");
+    meta.innerHTML = `<div class="name"></div><div class="sub"></div>`;
+    meta.querySelector(".name").textContent = e.text || "(sketch only)";
+    meta.querySelector(".sub").textContent = `${e.label} · ${e.host} · ${new Date(e.at).toLocaleString()}`;
+    li.append(meta);
+    li.onclick = () => reopen(e);
+    ul.append(li);
+  }
+  $("history").hidden = false;
+}
+
+let reopening = false;
+async function reopen(e) {
+  if (reopening) return;
+  reopening = true;
+  try {
+    if (e.image) await insertImage(await api(`/api/image?${new URLSearchParams({ host: e.host, path: e.image })}`));
+    $("text").value = e.text || "";
+    if (findSession(e)) select(e);
+    $("history").hidden = true;
+  } catch (err) {
+    $("history-status").textContent = err.message;
+  } finally {
+    reopening = false;
+  }
+}
+
+$("open-history").onclick = openHistory;
+$("history-close").onclick = () => { $("history").hidden = true; };
+
 function updateSendButton() {
   const found = findSession(selected);
   const name = found && (found.s.label || found.s.id);
@@ -330,6 +395,7 @@ $("send").onclick = async () => {
     pendingSend = null;
     const name = found.s.label || found.s.id;
     remember(selected, name);
+    addHistory({ at: Date.now(), host: selected.host, id: selected.id, label: name, text, image: r.image }, image);
     setStatus(`${r.duplicate ? "Already sent to" : "Sent to"} ${name} via ${r.via === "socket" ? "inbox" : r.via} ✓ ${new Date().toLocaleTimeString()}`);
     renderRecent();
     $("text").value = "";
