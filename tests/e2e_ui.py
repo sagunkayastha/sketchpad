@@ -168,6 +168,15 @@ def run_checks(page, home):
     check("missing folder shows an error in the dialog", True)
     page.click("#browser-close")
 
+    page.evaluate("window.sketchpad.api.resetScene()")
+    page.click("#open-image")
+    page.locator("#browser-list li", has_text="my plots/").click()
+    page.locator("#browser-list li", has_text="wide plot.png").dblclick()
+    page.wait_for_selector("#browser", state="hidden")
+    page.wait_for_timeout(500)
+    check("double-tap inserts the image once", page.evaluate("window.sketchpad.api.getSceneElements().length") == 1)
+    page.evaluate("window.sketchpad.api.resetScene()")
+
 
 def run_session_checks(page, home, inbox):
     page.wait_for_selector("#sessions li.empty")

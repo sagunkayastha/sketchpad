@@ -183,12 +183,16 @@ function ago(mtime) {
 }
 
 function browserStatus(msg) { $("browser-status").textContent = msg; }
+let browseSeq = 0;
+let picking = false;
 
 async function browse(path) {
+  const seq = ++browseSeq;
   const host = $("browser-host").value;
   browserStatus("Loading…");
   try {
     const d = await api(`/api/ls?${new URLSearchParams({ host, path })}`);
+    if (seq !== browseSeq) return;
     $("browser-path").value = d.path;
     const ul = $("browser-list");
     ul.innerHTML = "";
@@ -207,17 +211,22 @@ async function browse(path) {
     }
     browserStatus(d.entries.length ? "" : "No folders or images here.");
   } catch (e) {
-    browserStatus(e.message);
+    if (seq === browseSeq) browserStatus(e.message);
   }
 }
 
 async function pick(path) {
+  if (picking) return;
+  picking = true;
+  ++browseSeq;
   browserStatus("Opening…");
   try {
     await insertImage(await api(`/api/image?${new URLSearchParams({ host: $("browser-host").value, path })}`));
     $("browser").hidden = true;
   } catch (e) {
     browserStatus(e.message);
+  } finally {
+    picking = false;
   }
 }
 
