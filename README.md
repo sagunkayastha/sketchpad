@@ -1,6 +1,6 @@
 # sketchpad
 
-Draw on an iPad (or any browser) and send the sketch straight into a running
+Draw in any browser, iPad with Apple Pencil or a PC, and send the sketch straight into a running
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) session.
 
 Explaining a layout, a data flow, or "the bump on this plot" is faster with a pen than
