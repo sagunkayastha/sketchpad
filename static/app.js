@@ -45,6 +45,34 @@ function select(sel) {
   renderSessions();
 }
 
+const RECENT_KEY = "sketchpad-recent";
+
+function loadList(key) {
+  try { return JSON.parse(store.get(key)) || []; } catch { return []; }
+}
+
+function remember(sel, label) {
+  const rest = loadList(RECENT_KEY).filter((r) => !(r.host === sel.host && r.id === sel.id));
+  store.set(RECENT_KEY, JSON.stringify([{ host: sel.host, id: sel.id, label }, ...rest].slice(0, 4)));
+}
+
+function renderRecent() {
+  const box = $("recent");
+  box.innerHTML = "";
+  for (const r of loadList(RECENT_KEY)) {
+    if (selected && r.host === selected.host && r.id === selected.id) continue;
+    const found = findSession(r);
+    if (!found || !found.s.via) continue;
+    const b = document.createElement("button");
+    b.textContent = found.s.label || r.label;
+    b.title = r.host;
+    b.onclick = () => select(r);
+    box.append(b);
+    if (box.children.length === 3) break;
+  }
+  box.hidden = !box.children.length;
+}
+
 function updateSendButton() {
   const found = findSession(selected);
   const name = found && (found.s.label || found.s.id);
@@ -82,6 +110,7 @@ function renderSessions() {
     }
   }
   updateSendButton();
+  renderRecent();
 }
 
 function refreshSessions() {
@@ -264,6 +293,7 @@ $("open-image").onclick = () => {
 };
 $("browser-host").onchange = () => browse("~");
 $("browser-close").onclick = () => { $("browser").hidden = true; };
+$("browser-path").oninput = () => { ++browseSeq; };
 $("browser-path").onkeydown = (e) => {
   if (e.key !== "Enter") return;
   e.preventDefault();
@@ -299,7 +329,9 @@ $("send").onclick = async () => {
     });
     pendingSend = null;
     const name = found.s.label || found.s.id;
+    remember(selected, name);
     setStatus(`${r.duplicate ? "Already sent to" : "Sent to"} ${name} via ${r.via === "socket" ? "inbox" : r.via} ✓ ${new Date().toLocaleTimeString()}`);
+    renderRecent();
     $("text").value = "";
     excalidraw.resetScene();
   } catch (e) {

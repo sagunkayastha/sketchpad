@@ -39,6 +39,10 @@ html, body {
 #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #board { flex: 1; min-height: 0; position: relative; }
 #board > .excalidraw { position: absolute; inset: 0; }
+#recent { display: flex; gap: 8px; padding: 8px 8px 0; overflow-x: auto; }
+#recent[hidden] { display: none; }
+#recent button { touch-action: manipulation; font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; min-height: 36px; white-space: nowrap; }
 /* body disables selection for the drawing surface; Excalidraw's text fields need it back (iOS won't edit them otherwise) */
 .excalidraw input, .excalidraw textarea { -webkit-user-select: text; user-select: text; }
 #sendrow { display: flex; gap: 8px; padding: 8px; }

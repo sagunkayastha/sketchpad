@@ -248,6 +248,16 @@ def run_session_checks(page, home, inbox):
     page.evaluate("window.sketchpad.MAX_SEND = 24 * 1024 * 1024")
     page.evaluate("window.sketchpad.api.resetScene()")
 
+    add_session(home, inbox, "s2", "e2e-two")
+    page.locator("#sessions li", has_text="e2e-two").click(timeout=10000)
+    page.fill("#text", "second")
+    page.click("#send")
+    page.wait_for_function("document.getElementById('status').textContent.includes('Sent to e2e-two')", timeout=10000)
+    chip = page.locator("#recent button", has_text="e2e-one")
+    check("recent row offers the other recent session", chip.count() == 1)
+    chip.click()
+    check("tapping a recent chip selects it", page.inner_text("#send") == "Send to e2e-one")
+
 
 if __name__ == "__main__":
     main()
