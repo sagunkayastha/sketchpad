@@ -24,8 +24,11 @@ def capture(url):
         raise ValueError("Chrome or Chromium is not installed on this machine")
     with tempfile.TemporaryDirectory(prefix="sketchpad-urlshot-") as folder:
         path = Path(folder) / "screenshot.png"
+        profile = Path(folder) / "profile"
+        profile.mkdir()
         command = [browser, "--headless=new", f"--screenshot={path}", "--window-size=1440,900",
-                   "--hide-scrollbars", "--no-first-run", "--no-default-browser-check", url]
+                   "--hide-scrollbars", f"--user-data-dir={profile}", "--no-first-run",
+                   "--no-default-browser-check", url]
         try:
             result = subprocess.run(command, capture_output=True, timeout=TIMEOUT)
         except subprocess.TimeoutExpired:
