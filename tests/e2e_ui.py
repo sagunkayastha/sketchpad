@@ -353,6 +353,31 @@ def run_screen_checks(page, home):
           page.evaluate("window.sketchpad.api.getSceneElements().length") == 2)
     page.evaluate("window.sketchpad.api.resetScene()")
 
+    # "This computer" uses the browser's share picker; stand in a 320x200 canvas stream for it.
+    page.evaluate("""() => {
+      const c = document.createElement("canvas"); c.width = 320; c.height = 200;
+      const g = c.getContext("2d"); g.fillStyle = "#c00";
+      setInterval(() => g.fillRect(0, 0, 320, 200), 50);  // keep frames coming in headless Chrome
+      navigator.mediaDevices.getDisplayMedia = async () => (window.fakeStream = c.captureStream());
+    }""")
+    page.click("#open-screen")
+    page.click("#shot-local")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 1", timeout=10000)
+    size = page.evaluate("""async () => {
+      const f = Object.values(window.sketchpad.api.getFiles()).pop();
+      const i = new Image(); i.src = f.dataURL; await i.decode(); return [i.naturalWidth, i.naturalHeight];
+    }""")
+    check("This computer puts the shared screen's frame on the board", size == [320, 200])
+    check("sharing stops after the one frame",
+          page.evaluate("window.fakeStream.getTracks().every((t) => t.readyState === 'ended')"))
+    page.evaluate("() => { navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException('denied', 'NotAllowedError'); }; }")
+    page.click("#open-screen")
+    page.click("#shot-local")
+    page.wait_for_function("document.getElementById('status').textContent.includes('cancelled')", timeout=10000)
+    check("cancelling the share picker shows 'cancelled' and adds nothing",
+          page.evaluate("window.sketchpad.api.getSceneElements().length") == 1)
+    page.evaluate("window.sketchpad.api.resetScene()")
+
 
 def run_url_checks(page, home):
     page.click("#open-url")

@@ -399,6 +399,39 @@ async function screenshot(mode) {
     shooting = false;
   }
 }
+// The browser's own share picker captures the computer the browser runs on (any OS).
+async function screenshotLocal() {
+  $("screen-menu").hidden = true;
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    setStatus("This computer needs the https:// address. Or take a screenshot (Win+Shift+S) and press Ctrl+V on the board.", true);
+    return;
+  }
+  setStatus("Pick a screen or window to share…");
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  } catch {
+    setStatus("screenshot cancelled", true);
+    return;
+  }
+  try {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.srcObject = stream;
+    await video.play();
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    await insertImage({ name: "screen-local.png", mimeType: "image/png", dataURL: canvas.toDataURL("image/png") });
+    setStatus("");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    stream.getTracks().forEach((t) => t.stop());
+  }
+}
+$("shot-local").onclick = screenshotLocal;
 $("shot-full").onclick = () => screenshot("full");
 $("shot-box").onclick = () => screenshot("box");
 

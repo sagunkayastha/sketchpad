@@ -26,6 +26,10 @@ image on its next turn.
   to resize, double-click to crop), and you annotate on top of it. Large raster sources
   shrink on insert; sketches export at up to 2× resolution. Handy for "fix this part of
   the figure".
+- **Screenshot the computer you're at** (Windows, Mac or Linux): **Screen ▾** → *This
+  computer* opens the browser's share picker; pick a screen or window and one frame lands
+  on the board (double-click it to crop). Needs the https:// address; on plain http the
+  browser hides the picker, so paste a screenshot instead.
 - **Screenshot a machine's desktop**: **Screen ▾** → *Full screen* or *Select box*.
   The machine's desktop screenshot portal handles the capture and area picker. Esc
   cancels. The shot lands on the board like an opened image. A desktop may ask once
