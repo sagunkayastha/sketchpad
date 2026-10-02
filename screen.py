@@ -1,33 +1,40 @@
-"""Screenshot this machine's screen with flameshot, for when you're sitting at it.
-
-"full" grabs every monitor at once. "box" opens flameshot's own selection overlay on this
-screen and waits for you to drag a box and press Enter (Esc cancels).
-"""
+"""Capture this machine's screen with the desktop Screenshot portal."""
 import base64
-import os
-import subprocess
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
-COMMANDS = {"full": ["flameshot", "full", "--raw"], "box": ["flameshot", "gui", "--raw"]}
+import portal_dbus
+
 TIMEOUTS = {"full": 15, "box": 120}  # box waits for a person
-# On Wayland (GNOME) flameshot's overlay covers only one monitor; through XWayland it spans them all.
-ENV = {"full": {}, "box": {"QT_QPA_PLATFORM": "xcb"}}
+
+
+def request(interactive, timeout):
+    return portal_dbus.screenshot(interactive, timeout)
 
 
 def capture(mode):
-    """Returns the same shape as files.read_image; raises ValueError for anything the user should see."""
-    if mode not in COMMANDS:
+    """Returns the same shape as files.read_image; raises ValueError for user-facing errors."""
+    if mode not in TIMEOUTS:
         raise ValueError(f"unknown screenshot mode: {mode}")
+    code, uri_text = request(mode == "box", TIMEOUTS[mode])
+    if code == 1:
+        raise ValueError("screenshot cancelled")
+    if code != 0:
+        raise ValueError(f"screenshot failed: portal response {code}")
+    if not uri_text:
+        raise ValueError("screenshot portal returned no image URI")
+    uri = urlsplit(uri_text)
+    if uri.scheme != "file" or uri.netloc not in ("", "localhost"):
+        raise ValueError("screenshot portal returned a non-file URI")
+    path = Path(unquote(uri.path))
     try:
-        r = subprocess.run(COMMANDS[mode], capture_output=True, timeout=TIMEOUTS[mode],
-                           env={**os.environ, **ENV[mode]})
-    except FileNotFoundError:
-        raise ValueError("flameshot is not installed on this machine") from None
-    except subprocess.TimeoutExpired:
-        raise ValueError("screenshot timed out") from None
-    if not r.stdout.startswith(b"\x89PNG"):
-        # Esc exits 0 on some setups and non-zero with "Screenshot aborted." on others (GNOME Wayland).
-        if r.returncode == 0 or b"Screenshot aborted" in r.stderr:
-            raise ValueError("screenshot cancelled")
-        raise ValueError(f"flameshot failed: {r.stderr.decode(errors='replace').strip()[-300:]}")
-    data = base64.b64encode(r.stdout).decode()
-    return {"name": f"screen-{mode}.png", "mimeType": "image/png", "dataURL": f"data:image/png;base64,{data}"}
+        data = path.read_bytes()
+    except OSError as error:
+        raise ValueError(f"could not read screenshot: {error}") from error
+    finally:
+        path.unlink(missing_ok=True)
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("screenshot portal did not return a PNG")
+    encoded = base64.b64encode(data).decode()
+    return {"name": f"screen-{mode}.png", "mimeType": "image/png",
+            "dataURL": f"data:image/png;base64,{encoded}"}

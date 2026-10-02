@@ -1,5 +1,6 @@
-import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import files
@@ -8,54 +9,47 @@ import screen
 PNG = b"\x89PNG\r\n\x1a\n" + b"rest"
 
 
-def result(stdout=b"", returncode=0, stderr=b""):
-    return subprocess.CompletedProcess([], returncode, stdout, stderr)
-
-
 class CaptureTest(unittest.TestCase):
-    def capture(self, mode, **run):
-        with mock.patch.object(screen.subprocess, "run", **run) as r:
-            return screen.capture(mode), r
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.image = Path(self.tmp.name) / "portal shot.png"
+        self.image.write_bytes(PNG)
 
-    def test_full_returns_image_like_read_image(self):
-        img, run = self.capture("full", return_value=result(PNG))
-        self.assertEqual(run.call_args.args[0], ["flameshot", "full", "--raw"])
-        self.assertEqual(img["mimeType"], "image/png")
-        self.assertTrue(img["dataURL"].startswith("data:image/png;base64,iVBORw0KGg"))
+    def capture(self, mode, code=0, uri=None):
+        with mock.patch.object(screen, "request", return_value=(code, uri or self.image.as_uri())) as call:
+            return screen.capture(mode), call
 
-    def test_box_uses_flameshot_gui_and_waits_longer(self):
-        _, run = self.capture("box", return_value=result(PNG))
-        self.assertEqual(run.call_args.args[0], ["flameshot", "gui", "--raw"])
-        self.assertGreater(run.call_args.kwargs["timeout"], 60)
-        # On Wayland the overlay covers only one monitor; through XWayland it covers all.
-        self.assertEqual(run.call_args.kwargs["env"]["QT_QPA_PLATFORM"], "xcb")
+    def test_full_calls_portal_noninteractive_and_deletes_temp_png(self):
+        image, call = self.capture("full")
+        call.assert_called_once_with(False, 15)
+        self.assertEqual(image["name"], "screen-full.png")
+        self.assertEqual(image["mimeType"], "image/png")
+        self.assertTrue(image["dataURL"].startswith("data:image/png;base64,iVBORw0KGg"))
+        self.assertFalse(self.image.exists())
 
-    def test_escape_is_cancelled(self):
-        with self.assertRaisesRegex(ValueError, "cancelled"):
-            self.capture("box", return_value=result(b""))
+    def test_box_calls_portal_interactive_and_waits_longer(self):
+        _, call = self.capture("box")
+        call.assert_called_once_with(True, 120)
 
-    def test_escape_with_error_exit_is_cancelled(self):
-        # flameshot 13 on GNOME exits non-zero on Esc, with Qt noise before "Screenshot aborted."
-        stderr = b"QPainter::drawEllipse: Painter not active\nflameshot: info: Screenshot aborted.\n"
+    def test_response_one_is_cancelled(self):
         with self.assertRaisesRegex(ValueError, "^screenshot cancelled$"):
-            self.capture("box", return_value=result(b"", 1, stderr))
+            self.capture("box", code=1)
 
-    def test_flameshot_error_is_reported(self):
-        with self.assertRaisesRegex(ValueError, "no display"):
-            self.capture("full", return_value=result(b"", 1, b"qt: no display"))
+    def test_other_response_code_is_an_error(self):
+        with self.assertRaisesRegex(ValueError, "portal response 2"):
+            self.capture("full", code=2)
 
-    def test_not_installed(self):
-        with self.assertRaisesRegex(ValueError, "not installed"):
-            self.capture("full", side_effect=FileNotFoundError("flameshot"))
-
-    def test_timeout(self):
-        with self.assertRaisesRegex(ValueError, "timed out"):
-            self.capture("box", side_effect=subprocess.TimeoutExpired(["flameshot"], 120))
+    def test_non_png_is_rejected_and_temp_file_is_deleted(self):
+        self.image.write_bytes(b"bad")
+        with self.assertRaisesRegex(ValueError, "PNG"):
+            self.capture("full")
+        self.assertFalse(self.image.exists())
 
     def test_unknown_mode_is_400(self):
         status, body = files.call(screen.capture, "rm -rf")
         self.assertEqual(status, 400)
-        self.assertIn("unknown", body["error"])
+        self.assertIn("unknown screenshot mode", body["error"])
 
 
 if __name__ == "__main__":

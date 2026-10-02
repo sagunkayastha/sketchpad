@@ -26,9 +26,13 @@ image on its next turn.
   to resize, double-click to crop), and you annotate on top of it. Large raster sources
   shrink on insert; sketches export at up to 2× resolution. Handy for "fix this part of
   the figure".
-- **Screenshot the machine you're at**: **Screen ▾** → *Full screen* (all monitors) or
-  *Select box* (flameshot's own drag-a-box overlay, across every monitor; Enter to take
-  it, Esc to cancel). The shot lands on the board like an opened image.
+- **Screenshot a machine's desktop**: **Screen ▾** → *Full screen* or *Select box*.
+  The machine's desktop screenshot portal handles the capture and area picker. Esc
+  cancels. The shot lands on the board like an opened image. A desktop may ask once
+  for permission to allow a non-interactive full-screen capture.
+- **Screenshot a URL**: **URL…** captures a web page with a headless browser on the
+  selected session's machine. `http://localhost:5173` reaches that machine's dev
+  server. The shot lands on the board unlocked, ready to resize and annotate.
 - **Paste a screenshot from any OS**: take it with the system tool (Windows **Win+Shift+S**,
   macOS **Cmd+Ctrl+Shift+4**, GNOME **PrtSc**), click the board and press **Ctrl+V**. No
   flameshot or helper needed, and it works over plain HTTP. Excalidraw keeps pasted
@@ -72,9 +76,10 @@ in that terminal.
 ## Requirements
 
 - Python 3.9+ (no packages needed to run)
-- Optional: [flameshot](https://flameshot.org) on the machines whose screen the **Screen**
-  button should capture (works on GNOME Wayland, where Select box runs through XWayland so
-  it spans all monitors; `grim` does not). Without it, paste screenshots instead.
+- A reachable desktop session bus and system libgio on machines whose screen **Screen**
+  should capture. The desktop portal supplies the area picker; no flameshot is used.
+- Google Chrome, Chromium, or `chromium-browser` on a machine whose URLs **URL…**
+  should capture. The server uses its headless CLI; no Python browser package is needed.
 - Claude Code 2.1 or newer, in any terminal. Sessions inside **tmux** or **kitty** get
   the message typed in; everything else goes through the session's inbox socket.
 - For kitty: add to `kitty.conf` and restart kitty
@@ -158,7 +163,8 @@ Layout:
 | `server.py` | HTTP server: hub and helper roles, routes, CLI |
 | `sessions.py` | find Claude Code sessions, pick tmux pane / kitty window / inbox socket, deliver text |
 | `files.py` | folder listing and image reading for the **Image…** browser |
-| `screen.py` | screenshots with flameshot for the **Screen** button |
+| `screen.py` | desktop portal screenshots for the **Screen** button |
+| `urlshot.py` | headless browser capture for **URL…** on the selected machine |
 | `auth.py` | password hashing and signed cookies |
 | `static/` | the page: `index.html`, `app.js` (Excalidraw mount, session list, send), `login.html`, `style.css` |
 | `deploy/` | systemd units, tunnel script, Tailscale sidecar |
