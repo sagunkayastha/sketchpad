@@ -32,18 +32,32 @@
     <div id="recent" hidden></div>
     <div id="sendrow">
       <button id="open-image">Image…</button>
-      <button id="open-screen" title="Screenshot the machine you're sitting at (flameshot)">Screen ▾</button>
+      <button id="open-screen" title="Capture this computer, or a machine's screen with its desktop screenshot tool">Screen ▾</button>
+      <button id="open-url" title="Capture a URL on the selected session's machine">URL…</button>
       <button id="open-history">History</button>
       <textarea id="text" rows="1" placeholder="Message (optional)"></textarea>
       <button id="send">Send</button>
     </div>
     <div id="status"></div>
     <div id="screen-menu" hidden>
+      <button id="shot-local" title="The computer this browser runs on (Windows, Mac or Linux): pick a screen or window">This computer</button>
       <select id="screen-host" title="Machine to capture: the one you're sitting at"></select>
       <button id="shot-full">Full screen</button>
       <button id="shot-box">Select box</button>
     </div>
   </main>
+</div>
+<div id="url-dialog" hidden>
+  <div class="panel">
+    <div class="row"><strong>Capture URL on <span id="url-host"></span></strong><span class="spacer"></span>
+      <button id="url-close">✕</button></div>
+    <div class="row">
+      <input id="url-input" type="url" inputmode="url" autocapitalize="none" autocorrect="off"
+             spellcheck="false" placeholder="http://localhost:5173">
+      <button id="url-capture">Capture</button>
+    </div>
+    <div id="url-status"></div>
+  </div>
 </div>
 <div id="browser" hidden>
   <div class="panel">

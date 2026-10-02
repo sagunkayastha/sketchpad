@@ -13,7 +13,7 @@ html, body {
   font: 15px -apple-system, system-ui, sans-serif;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
-#sidebar button, #sendrow button, #browser button, #history button, #screen-menu button, #login button { touch-action: manipulation; font: inherit; color: var(--fg);
+#sidebar button, #sendrow button, #browser button, #history button, #url-dialog button, #screen-menu button, #login button { touch-action: manipulation; font: inherit; color: var(--fg);
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; min-height: 44px; }
 
 #app { display: flex; height: 100vh; height: 100dvh; }
@@ -59,15 +59,19 @@ html, body {
   background: var(--panel); color: var(--fg); -webkit-user-select: text; user-select: text; }
 #login #submit { background: var(--accent); border-color: var(--accent); font-weight: 600; color: #fff; }
 
-#browser, #history { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+#browser, #history, #url-dialog { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, .5); }
-#browser[hidden], #history[hidden] { display: none; }
-#browser .panel, #history .panel { width: min(720px, 92vw); height: min(560px, 80vh); display: flex; flex-direction: column; gap: 8px;
+#browser[hidden], #history[hidden], #url-dialog[hidden] { display: none; }
+#browser .panel, #history .panel, #url-dialog .panel { width: min(720px, 92vw); height: min(560px, 80vh); display: flex; flex-direction: column; gap: 8px;
   padding: 12px; border-radius: 12px; background: var(--panel); }
-#browser .row, #history .row { display: flex; gap: 8px; }
-#browser select, #browser-path { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+#browser .row, #history .row, #url-dialog .row { display: flex; gap: 8px; }
+#browser select, #browser-path, #url-input { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); }
 #browser-path { flex: 1; min-width: 0; -webkit-user-select: text; user-select: text; }
+#url-dialog .panel { height: auto; }
+#url-dialog .spacer { flex: 1; }
+#url-input { flex: 1; min-width: 0; -webkit-user-select: text; user-select: text; }
+#url-status { min-height: 18px; color: var(--error); font-size: 13px; }
 #browser-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
 #browser-list li { padding: 10px; border-bottom: 1px solid var(--selected); cursor: pointer; word-break: break-all; }
 #browser-list li.dir { font-weight: 600; }

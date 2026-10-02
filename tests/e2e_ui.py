@@ -87,17 +87,41 @@ def main():
     (home / "my plots").mkdir()
     make_png(home / "my plots" / "wide plot.png", 3000, 1500)
     make_png(home / "my plots" / "huge plot.png", 5000, 2500)
-    # A fake flameshot first on the hub's PATH, so the screenshot checks never capture the real screen.
+    # Fake the portal boundary and browser CLI: no real screen or URL capture.
     make_png(home / "fake-screen.png", 640, 360)
+    make_png(home / "fake-url.png", 800, 450)
     (home / "bin").mkdir()
-    fake = home / "bin" / "flameshot"
-    fake.write_text('#!/bin/sh\necho "$@" >> "$HOME/flameshot-args"\n'
-                    '[ -f "$HOME/cancel" ] && exit 0\ncat "$HOME/fake-screen.png"\n')
-    fake.chmod(0o755)
+    fakes = home / "fakes"
+    fakes.mkdir()
+    (fakes / "sitecustomize.py").write_text('''import os, tempfile
+from pathlib import Path
+import portal_dbus
+h = Path(os.environ["HOME"])
+def fake_screenshot(interactive, timeout):
+    with (h / "portal-args").open("a") as log:
+        log.write(f"{interactive} {timeout}\\n")
+    if (h / "cancel").exists(): return 1, None
+    fd, name = tempfile.mkstemp(suffix=".png", dir=h)
+    with os.fdopen(fd, "wb") as output:
+        output.write((h / "fake-screen.png").read_bytes())
+    return 0, Path(name).as_uri()
+portal_dbus.screenshot = fake_screenshot
+''')
+    browser_cli = home / "bin" / "google-chrome"
+    browser_cli.write_text('''#!/usr/bin/env python3
+import os, shutil, sys
+from pathlib import Path
+h = Path(os.environ["HOME"])
+with (h / "browser-args").open("a") as log:
+    log.write(" ".join(sys.argv[1:]) + "\\n")
+path = next(arg.split("=", 1)[1] for arg in sys.argv[1:] if arg.startswith("--screenshot="))
+shutil.copyfile(h / "fake-url.png", path)
+''')
+    browser_cli.chmod(0o755)
     inbox = FakeInbox(home / "inbox.sock")
     env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
     env.update(HOME=str(home), XDG_RUNTIME_DIR=str(home), TMUX_TMPDIR=str(home),
-               PATH=f"{home / 'bin'}:{os.environ['PATH']}")
+               PATH=f"{home / 'bin'}:{os.environ['PATH']}", PYTHONPATH=f"{fakes}:{ROOT}")
     hub = subprocess.Popen([sys.executable, "server.py", "serve", "--bind", "127.0.0.1", "--port", str(PORT)],
                            cwd=ROOT, env=env)
     try:
@@ -115,6 +139,7 @@ def main():
             run_checks(page, home)
             run_session_checks(page, home, inbox)
             run_screen_checks(page, home)
+            run_url_checks(page, home)
             check("no page errors", not errors or print(errors))
             browser.close()
     finally:
@@ -316,16 +341,66 @@ def run_screen_checks(page, home):
     page.click("#open-screen")
     page.click("#shot-box")
     page.wait_for_function("window.sketchpad.api.getSceneElements().length === 2", timeout=10000)
-    args = (home / "flameshot-args").read_text().splitlines()
-    check("Full screen runs 'flameshot full', Select box runs 'flameshot gui'",
-          args == ["full --raw", "gui --raw"])
+    calls = (home / "portal-args").read_text().splitlines()
+    check("portal full is noninteractive and box uses its area picker",
+          calls == ["False 15", "True 120"])
 
     (home / "cancel").touch()
     page.click("#open-screen")
     page.click("#shot-box")
     page.wait_for_function("document.getElementById('status').textContent.includes('cancelled')", timeout=10000)
-    check("Esc in flameshot shows 'cancelled' and adds nothing",
+    check("portal cancel shows 'cancelled' and adds nothing",
           page.evaluate("window.sketchpad.api.getSceneElements().length") == 2)
+    page.evaluate("window.sketchpad.api.resetScene()")
+
+    # "This computer" uses the browser's share picker; stand in a 320x200 canvas stream for it.
+    page.evaluate("""() => {
+      const c = document.createElement("canvas"); c.width = 320; c.height = 200;
+      const g = c.getContext("2d"); g.fillStyle = "#c00";
+      setInterval(() => g.fillRect(0, 0, 320, 200), 50);  // keep frames coming in headless Chrome
+      navigator.mediaDevices.getDisplayMedia = async () => (window.fakeStream = c.captureStream());
+    }""")
+    page.click("#open-screen")
+    page.click("#shot-local")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 1", timeout=10000)
+    size = page.evaluate("""async () => {
+      const f = Object.values(window.sketchpad.api.getFiles()).pop();
+      const i = new Image(); i.src = f.dataURL; await i.decode(); return [i.naturalWidth, i.naturalHeight];
+    }""")
+    check("This computer puts the shared screen's frame on the board", size == [320, 200])
+    check("sharing stops after the one frame",
+          page.evaluate("window.fakeStream.getTracks().every((t) => t.readyState === 'ended')"))
+    page.evaluate("() => { navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException('denied', 'NotAllowedError'); }; }")
+    page.click("#open-screen")
+    page.click("#shot-local")
+    page.wait_for_function("document.getElementById('status').textContent.includes('cancelled')", timeout=10000)
+    check("cancelling the share picker shows 'cancelled' and adds nothing",
+          page.evaluate("window.sketchpad.api.getSceneElements().length") == 1)
+    page.evaluate("window.sketchpad.api.resetScene()")
+
+
+def run_url_checks(page, home):
+    page.click("#open-url")
+    page.wait_for_selector("#url-dialog:not([hidden])")
+    check("URL capture targets the selected session's machine",
+          page.locator("#url-host").text_content() ==
+          page.evaluate("JSON.parse(localStorage.getItem('sketchpad-selected')).host"))
+    page.fill("#url-input", "http://localhost:5173/plot")
+    page.click("#url-capture")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 1", timeout=10000)
+    image = page.evaluate("window.sketchpad.api.getSceneElements()[0]")
+    check("URL screenshot lands unlocked and scaled on board",
+          image["type"] == "image" and not image["locked"] and image["width"] <= 1600)
+    args = (home / "browser-args").read_text().splitlines()
+    check("headless browser got localhost URL on that machine",
+          len(args) == 1 and args[0].endswith("http://localhost:5173/plot"))
+    page.click("#open-url")
+    page.fill("#url-input", "file:///etc/passwd")
+    page.click("#url-capture")
+    page.wait_for_function("document.getElementById('url-status').textContent.includes('http')")
+    check("invalid URL stays in dialog and adds no image",
+          page.evaluate("window.sketchpad.api.getSceneElements().length") == 1)
+    page.click("#url-close")
     page.evaluate("window.sketchpad.api.resetScene()")
 
 

@@ -365,7 +365,7 @@ $("browser-path").onkeydown = (e) => {
   else browse(path);
 };
 
-// ---- screenshot the machine you're sitting at (flameshot runs there) ----
+// ---- screenshot the chosen machine through its desktop portal ----
 const SCREEN_KEY = "sketchpad-screen-host";
 let shooting = false;
 
@@ -388,8 +388,8 @@ async function screenshot(mode) {
   const host = $("screen-host").value;
   store.set(SCREEN_KEY, host);
   $("screen-menu").hidden = true;
-  setStatus(mode === "box" ? `Drag a box on ${host}'s screen, then press Enter (Esc cancels)…` : `Capturing ${host}'s screen…`);
-  await new Promise((r) => setTimeout(r, 200)); // let the menu disappear before flameshot grabs the screen
+  setStatus(mode === "box" ? `Select an area on ${host}'s desktop (Esc cancels)…` : `Capturing ${host}'s screen…`);
+  await new Promise((r) => setTimeout(r, 200)); // let the menu disappear before the desktop picker opens
   try {
     await insertImage(await api(`/api/screenshot?${new URLSearchParams({ host, mode })}`));
     setStatus("");
@@ -399,8 +399,74 @@ async function screenshot(mode) {
     shooting = false;
   }
 }
+// The browser's own share picker captures the computer the browser runs on (any OS).
+async function screenshotLocal() {
+  $("screen-menu").hidden = true;
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    setStatus("This computer needs the https:// address. Or take a screenshot (Win+Shift+S) and press Ctrl+V on the board.", true);
+    return;
+  }
+  setStatus("Pick a screen or window to share…");
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  } catch {
+    setStatus("screenshot cancelled", true);
+    return;
+  }
+  try {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.srcObject = stream;
+    await video.play();
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    await insertImage({ name: "screen-local.png", mimeType: "image/png", dataURL: canvas.toDataURL("image/png") });
+    setStatus("");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    stream.getTracks().forEach((t) => t.stop());
+  }
+}
+$("shot-local").onclick = screenshotLocal;
 $("shot-full").onclick = () => screenshot("full");
 $("shot-box").onclick = () => screenshot("box");
+
+// ---- URL screenshot on the selected session's machine ----
+let urlHost = null;
+let urlShooting = false;
+$("open-url").onclick = () => {
+  const found = findSession(selected);
+  if (!found || !found.host.online) { setStatus("Pick an online session first.", true); return; }
+  urlHost = found.host.host;
+  $("url-host").textContent = urlHost;
+  $("url-status").textContent = "";
+  $("url-dialog").hidden = false;
+  $("url-input").focus();
+};
+$("url-close").onclick = () => { if (!urlShooting) $("url-dialog").hidden = true; };
+async function captureURL() {
+  if (urlShooting) return;
+  const url = $("url-input").value.trim();
+  urlShooting = true;
+  $("url-capture").disabled = true;
+  $("url-status").textContent = `Capturing on ${urlHost}…`;
+  try {
+    await insertImage(await api(`/api/urlshot?${new URLSearchParams({ host: urlHost, url })}`));
+    $("url-dialog").hidden = true;
+    setStatus("");
+  } catch (e) {
+    $("url-status").textContent = e.message;
+  } finally {
+    urlShooting = false;
+    $("url-capture").disabled = false;
+  }
+}
+$("url-capture").onclick = captureURL;
+$("url-input").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); captureURL(); } };
 
 // ---- send ----
 // The LAN page is plain HTTP, so crypto.randomUUID is unavailable.

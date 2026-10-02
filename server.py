@@ -24,6 +24,7 @@ import auth
 import files
 import screen
 import sessions
+import urlshot
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
@@ -36,13 +37,15 @@ CONTENT_TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/c
 # Looked up at call time, so tests that patch screen.capture can never reach the real screen.
 MACHINE_ROUTES = {"/api/ls": lambda path: files.list_dir(path),
                   "/api/image": lambda path: files.read_image(path),
-                  "/api/screenshot": lambda mode: screen.capture(mode)}
-HELPER_TIMEOUTS = {"/api/ls": 5, "/api/image": 20, "/api/screenshot": 130}  # a box screenshot waits for a person
+                  "/api/screenshot": lambda mode: screen.capture(mode),
+                  "/api/urlshot": lambda url: urlshot.capture(url)}
+HELPER_TIMEOUTS = {"/api/ls": 5, "/api/image": 20, "/api/screenshot": 130,
+                   "/api/urlshot": 40}  # a box screenshot waits for a person
 
 
 def route_arg(route, query):
-    """(name, value) of the one argument a machine route takes: a mode for screenshots, else a path."""
-    name = "mode" if route == "/api/screenshot" else "path"
+    """(name, value) of the one argument a machine route takes."""
+    name = {"/api/screenshot": "mode", "/api/urlshot": "url"}.get(route, "path")
     return name, query.get(name, [""])[0]
 
 

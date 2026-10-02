@@ -83,6 +83,16 @@ class FileRoutesTest(unittest.TestCase):
             status, body = self.hub_get("/api/screenshot", host="remote", mode="box")
         self.assertEqual((status, body["error"]), (400, "screenshot cancelled"))
 
+    def test_url_screenshot_runs_on_selected_machine_through_helper(self):
+        shot = {"name": "url-screenshot.png", "mimeType": "image/png", "dataURL": "data:image/png;base64,AAAA"}
+        with mock.patch.object(server.urlshot, "capture", return_value=shot) as capture:
+            self.assertEqual(self.hub_get("/api/urlshot", host=server.HubHandler.host,
+                                          url="http://localhost:5173"), (200, shot))
+            self.assertEqual(self.hub_get("/api/urlshot", host="remote",
+                                          url="http://localhost:5173"), (200, shot))
+        self.assertEqual([c.args for c in capture.call_args_list],
+                         [("http://localhost:5173",), ("http://localhost:5173",)])
+
     def test_remote_error_passes_through(self):
         status, _ = self.hub_get("/api/image", host="remote", path=str(self.d / "missing.png"))
         self.assertEqual(status, 404)
