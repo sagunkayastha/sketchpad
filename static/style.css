@@ -89,3 +89,6 @@ html, body {
 #screen-menu[hidden] { display: none; }
 #screen-menu select { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); }
+
+/* ?embed=1 (tmls web's Sketch tab): the board only */
+body.embed #sidebar, body.embed #divider, body.embed #recent { display: none !important; }

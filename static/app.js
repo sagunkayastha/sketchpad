@@ -31,7 +31,11 @@ function setStatus(msg, isError = false) {
 // ---- session list ----
 let hosts = [];     // last /api/sessions result, also used by the image browser
 let selected = null; // {host, id}
-try { selected = JSON.parse(store.get("sketchpad-selected")); } catch {}
+// ?embed=1: inside tmls web's Sketch tab. tmls's rows choose the session (?target=), so the
+// session list, recent chips and the remembered selection are left out.
+const embedded = new URLSearchParams(location.search).get("embed") === "1";
+if (embedded) document.body.classList.add("embed");
+else try { selected = JSON.parse(store.get("sketchpad-selected")); } catch {}
 
 function findSession(sel) {
   const h = sel && hosts.find((x) => x.host === sel.host);
@@ -41,7 +45,7 @@ function findSession(sel) {
 
 function select(sel) {
   selected = { host: sel.host, id: sel.id };
-  store.set("sketchpad-selected", JSON.stringify(selected));
+  if (!embedded) store.set("sketchpad-selected", JSON.stringify(selected));
   renderSessions();
 }
 
@@ -143,6 +147,11 @@ function updateSendButton() {
   const name = found && (found.s.label || found.s.id);
   $("send").textContent = found ? `Send to ${name}` : "Send";
   $("send").title = found ? `${found.host.host} / ${name}` : "";
+  if (embedded) {
+    $("send").disabled = !found;
+    if (!found && hosts.length) setStatus("Sketch sends to Claude sessions: pick one on the right.");
+    else if (found && $("status").textContent.startsWith("Sketch sends to Claude")) setStatus("");
+  }
 }
 
 function renderSessions() {

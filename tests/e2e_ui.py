@@ -310,6 +310,13 @@ def run_session_checks(page, home, inbox):
     page.goto(BASE + "/?target=anyhost/no-such-session")
     page.wait_for_timeout(1500)
     check("unknown ?target keeps the last selection", page.inner_text("#send") == "Send to e2e-two")
+    page.goto(BASE + "/?embed=1&target=anyhost/e2e-two")
+    page.wait_for_function("document.getElementById('send').textContent === 'Send to e2e-two'", timeout=10000)
+    check("?embed=1 hides sketchpad's own session list", not page.is_visible("#sidebar"))
+    page.goto(BASE + "/?embed=1&target=anyhost/plain-shell")
+    page.wait_for_timeout(1500)
+    check("embedded with a non-Claude target: Send is off and says why",
+          page.is_disabled("#send") and "Claude" in page.inner_text("#status"))
     page.goto(BASE + "/")
     page.locator("#sessions li", has_text="e2e-one").click(timeout=10000)  # what the next checks expect
 
