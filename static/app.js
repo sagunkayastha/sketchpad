@@ -178,9 +178,21 @@ function renderSessions() {
   renderRecent();
 }
 
+// ?target=host/name (tmls web's Sketch tab): select the session in tmux session `name` once it's
+// listed. tmls and sketchpad name hosts differently, so the host only breaks ties.
+let target = new URLSearchParams(location.search).get("target");
+function applyTarget() {
+  if (!target) return;
+  const cut = target.indexOf("/");
+  const [host, name] = [target.slice(0, cut), target.slice(cut + 1)];
+  const matches = hosts.flatMap((h) => h.sessions.filter((s) => s.via && s.label === name).map((s) => ({ host: h.host, id: s.id })));
+  const pick = matches.find((m) => m.host === host) || matches[0];
+  if (pick) { target = null; select(pick); }
+}
+
 function refreshSessions() {
   api("/api/sessions")
-    .then((data) => { hosts = data.hosts; renderSessions(); })
+    .then((data) => { hosts = data.hosts; applyTarget(); renderSessions(); })
     .catch((e) => setStatus(e.message, true));
 }
 refreshSessions();

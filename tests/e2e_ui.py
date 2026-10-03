@@ -304,6 +304,15 @@ def run_session_checks(page, home, inbox):
           and page.input_value("#text") == "e2e hello")
     check("reopening selects that session", page.inner_text("#send") == "Send to e2e-one")
 
+    page.goto(BASE + "/?target=anyhost/e2e-two")
+    page.wait_for_function("document.getElementById('send').textContent === 'Send to e2e-two'", timeout=10000)
+    check("?target=host/name (from tmls web) preselects the session with that name", True)
+    page.goto(BASE + "/?target=anyhost/no-such-session")
+    page.wait_for_timeout(1500)
+    check("unknown ?target keeps the last selection", page.inner_text("#send") == "Send to e2e-two")
+    page.goto(BASE + "/")
+    page.locator("#sessions li", has_text="e2e-one").click(timeout=10000)  # what the next checks expect
+
     page.evaluate("""() => {
       const original = window.fetch;
       window.fetch = (...args) => original(...args).then((response) => {
