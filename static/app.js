@@ -149,7 +149,7 @@ function updateSendButton() {
   $("send").title = found ? `${found.host.host} / ${name}` : "";
   if (embedded) {
     $("send").disabled = !found;
-    if (!found && hosts.length) setStatus("Sketch sends to Claude sessions: pick one on the right.");
+    if (!found && hosts.length) setStatus("Sketch sends to Claude sessions: pick one in Send to, above.");
     else if (found && $("status").textContent.startsWith("Sketch sends to Claude")) setStatus("");
   }
 }
@@ -199,6 +199,16 @@ function applyTarget() {
   if (pick) { target = null; select(pick); }
 }
 
+// tmls web's Sketch tab says when its session changes, instead of reloading this frame (a reload
+// threw the drawing away). Only the parent page is listened to.
+if (embedded) window.addEventListener("message", (e) => {
+  if (e.source !== window.parent || !e.data || e.data.type !== "tmls-target") return;
+  selected = null;  // a target that isn't a Claude session leaves nothing selected
+  target = e.data.target || null;
+  applyTarget();
+  renderSessions();
+});
+
 function refreshSessions() {
   api("/api/sessions")
     .then((data) => { hosts = data.hosts; applyTarget(); renderSessions(); })
@@ -234,13 +244,41 @@ $("divider").addEventListener("pointerdown", (e) => {
 // ---- board ----
 let excalidraw = null; // imperative API, set once mounted
 
+// The board survives a reload, a closed tab or a restarted phone app: kept in this browser until
+// it is sent (Send clears it) or cleared. Images ride along when they fit.
+const BOARD_KEY = "sketchpad-board";
+function loadBoard() {
+  try {
+    const saved = JSON.parse(store.get(BOARD_KEY));
+    return saved && Array.isArray(saved.elements) ? { elements: saved.elements, files: saved.files || {} } : {};
+  } catch { return {}; }
+}
+let boardTimer = null;
+function saveBoardSoon(elements, appState, files) {
+  clearTimeout(boardTimer);
+  boardTimer = setTimeout(() => {
+    const live = elements.filter((el) => !el.isDeleted);
+    const used = new Set(live.map((el) => el.fileId).filter(Boolean));
+    const kept = Object.fromEntries(Object.entries(files || {}).filter(([id]) => used.has(id)));
+    try {
+      localStorage.setItem(BOARD_KEY, JSON.stringify({ elements: live, files: kept }));
+    } catch {  // too big for storage with its images: keep the drawing at least
+      store.set(BOARD_KEY, JSON.stringify({ elements: live.filter((el) => !el.fileId), files: {} }));
+    }
+  }, 400);
+}
+
+const restored = loadBoard();
 createRoot($("board")).render(React.createElement(Excalidraw, {
   excalidrawAPI: (a) => {
     excalidraw = a;
+    // A board brought back from storage: show all of it, not wherever the view happened to start.
+    if (restored.elements && restored.elements.length) setTimeout(() => a.scrollToContent(undefined, { fitToContent: true }), 0);
     window.sketchpad = { api: a, exportPng, insertImage,
       get MAX_SEND() { return sendLimit.MAX_SEND; }, set MAX_SEND(v) { sendLimit.MAX_SEND = v; } }; // e2e hook
   },
-  initialData: { appState: { viewBackgroundColor: "#ffffff" } },
+  initialData: { ...restored, appState: { viewBackgroundColor: "#ffffff" } },
+  onChange: saveBoardSoon,
   UIOptions: { canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false } },
 }));
 
@@ -452,6 +490,51 @@ async function screenshotLocal() {
     stream.getTracks().forEach((t) => t.stop());
   }
 }
+// Phones: no screen share, so no "This computer". Inside the tmls Android app, the app hands over the
+// phone's newest screenshot (window.tmlsApp, a message channel the app injects for these origins).
+const phone = /Android|iPhone|iPad/.test(navigator.userAgent);
+$("shot-local").hidden = phone;
+$("shot-phone").hidden = !window.tmlsApp;
+$("shot-phone").onclick = () => {
+  $("screen-menu").hidden = true;
+  setStatus("Getting the phone's last screenshot…");
+  window.tmlsApp.onmessage = async (e) => {
+    try {
+      const r = JSON.parse(e.data);
+      if (r.error) { setStatus(r.error, true); return; }
+      await insertImage(r);
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+  };
+  window.tmlsApp.postMessage("last-screenshot");
+};
+
+// Image…'s "This device…" (on a phone, its photo picker) and, on phones, "Camera…": a picture from
+// the device in hand.
+function insertDeviceFile(input) {
+  const file = input.files[0];
+  input.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      await insertImage({ name: file.name, mimeType: file.type || "image/png", dataURL: reader.result });
+      $("browser").hidden = true;
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+  };
+  reader.onerror = () => setStatus("Couldn't read that file.", true);
+  reader.readAsDataURL(file);
+}
+$("device-pick").onclick = () => $("device-file").click();
+$("device-file").onchange = () => insertDeviceFile($("device-file"));
+$("camera-pick").hidden = !phone;
+$("camera-pick").onclick = () => $("camera-file").click();
+$("camera-file").onchange = () => insertDeviceFile($("camera-file"));
 $("shot-local").onclick = screenshotLocal;
 $("shot-full").onclick = () => screenshot("full");
 $("shot-box").onclick = () => screenshot("box");

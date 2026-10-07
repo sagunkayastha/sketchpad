@@ -40,6 +40,7 @@
     </div>
     <div id="status"></div>
     <div id="screen-menu" hidden>
+      <button id="shot-phone" hidden title="Take a screenshot (Power + Volume down) in any app, come back, tap this">This phone's last screenshot</button>
       <button id="shot-local" title="The computer this browser runs on (Windows, Mac or Linux): pick a screen or window">This computer</button>
       <select id="screen-host" title="Machine to capture: the one you're sitting at"></select>
       <button id="shot-full">Full screen</button>
@@ -62,6 +63,10 @@
 <div id="browser" hidden>
   <div class="panel">
     <div class="row">
+      <button id="device-pick" title="A photo or screenshot on the device you're using">This device…</button>
+      <input id="device-file" type="file" accept="image/*" hidden>
+      <button id="camera-pick" hidden title="Take a photo with this phone's camera">Camera…</button>
+      <input id="camera-file" type="file" accept="image/*" capture="environment" hidden>
       <select id="browser-host"></select>
       <input id="browser-path" autocapitalize="none" autocorrect="off" spellcheck="false"
              placeholder="/path/to/folder or image.png">
