@@ -68,6 +68,21 @@ class KdeTest(unittest.TestCase):
         run = FakeRun(kscreen(output("DP-1", 0, 0, 1920, 1080, rotation=2)))
         self.assertEqual(screen.kde_screens(run)[0]["width"], 1080)
 
+    def test_current_mode_size_wins_over_an_already_turned_size(self):
+        turned = output("DP-1", 0, 0, 1080, 1920, rotation=8)  # "size" already portrait
+        turned.update(currentModeId="3", modes=[{"id": "3", "size": {"width": 1920, "height": 1080}}])
+        flipped = output("DP-3", 0, 0, 1920, 1080, rotation=32)  # flipped 90
+        widths = [s["width"] for s in screen.kde_screens(FakeRun(kscreen(turned, flipped)))]
+        self.assertEqual(widths, [1080, 1080])
+
+    def test_spectacle_failure_says_why(self):
+        run = FakeRun(saves=None)
+        run_failing = lambda argv, **kw: subprocess.CompletedProcess(argv, 1, b"", b"x\nalready running")
+        with self.assertRaisesRegex(ValueError, "saved no image.*already running"):
+            screen.spectacle_capture("all", None, "x.png", run_failing)
+        with self.assertRaisesRegex(ValueError, "saved no image"):
+            screen.spectacle_capture("all", None, "x.png", run)
+
     def test_bad_kscreen_output_is_an_error(self):
         with self.assertRaisesRegex(ValueError, "could not list screens"):
             screen.kde_screens(FakeRun("not json"))

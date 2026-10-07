@@ -1,6 +1,6 @@
-# Sets up this Windows machine as a sketchpad helper (screenshots only): two logon tasks,
-# the helper itself (pythonw, no window) and the reverse tunnel to the hub.
-# Needs: Python 3.12+ from python.org or winget (for pythonw.exe), key login to the hub with
+# Sets up this Windows machine as a sketchpad helper (screenshots only): two hidden logon
+# tasks, the helper itself (deploy\windows\helper.ps1) and the reverse tunnel to the hub.
+# Needs: Python 3.12+ from python.org or winget, key login to the hub with
 # Windows' own ssh, and the shared secret in ~\.config\sketchpad\helper-token.
 # Run in a normal (not admin) PowerShell:  powershell -ExecutionPolicy Bypass -File install.ps1
 param([string]$Hub = "archbox", [int]$HubPort = 8792)
@@ -9,8 +9,9 @@ $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 
 $token = Join-Path $HOME ".config\sketchpad\helper-token"
 if (-not (Test-Path $token)) { throw "Missing $token (copy it from the hub)." }
-$pythonw = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source
-if (-not $pythonw) { throw "pythonw.exe not found: winget install Python.Python.3.13" }
+if (-not (Get-Command python.exe -ErrorAction SilentlyContinue)) {
+    throw "python.exe not found: winget install Python.Python.3.13"
+}
 & ssh -o BatchMode=yes -o ConnectTimeout=10 $Hub true
 if ($LASTEXITCODE -ne 0) { throw "ssh $Hub needs key login first." }
 
@@ -19,8 +20,9 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 
-$helper = New-ScheduledTaskAction -Execute $pythonw -WorkingDirectory $repo `
-    -Argument "server.py helper --bind 127.0.0.1"
+# Task restarts only cover a failed start, so helper.ps1 restarts the helper itself.
+$helper = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $repo `
+    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$repo\deploy\windows\helper.ps1`""
 Register-ScheduledTask -TaskName "sketchpad-helper" -Action $helper -Trigger $trigger `
     -Settings $settings -Force | Out-Null
 

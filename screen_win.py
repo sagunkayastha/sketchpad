@@ -137,11 +137,12 @@ def _grab(x, y, width, height):
     screen = user32.GetDC(None)
     memory = gdi32.CreateCompatibleDC(screen)
     bitmap = gdi32.CreateCompatibleBitmap(screen, width, height)
+    old = gdi32.SelectObject(memory, bitmap)
     try:
-        old = gdi32.SelectObject(memory, bitmap)
         if not gdi32.BitBlt(memory, 0, 0, width, height, screen, x, y, SRCCOPY | CAPTUREBLT):
-            raise ValueError("screen capture failed (BitBlt)")
+            raise ValueError("screen capture failed (BitBlt; is the lock screen or a UAC prompt up?)")
         gdi32.SelectObject(memory, old)
+        old = None
         header = BITMAPINFOHEADER(biSize=C.sizeof(BITMAPINFOHEADER), biWidth=width,
                                   biHeight=-height, biPlanes=1, biBitCount=32)  # top-down
         pixels = C.create_string_buffer(width * height * 4)
@@ -149,9 +150,15 @@ def _grab(x, y, width, height):
             raise ValueError("screen capture failed (GetDIBits)")
         return png(width, height, bgrx_to_rgb(pixels.raw))
     finally:
+        if old is not None:
+            gdi32.SelectObject(memory, old)  # a bitmap still selected into a DC can't be deleted
         gdi32.DeleteObject(bitmap)
         gdi32.DeleteDC(memory)
         user32.ReleaseDC(None, screen)
+
+
+class ClipboardBusy(ValueError):
+    pass
 
 
 def _clipboard_dib():
@@ -160,7 +167,7 @@ def _clipboard_dib():
             break
         time.sleep(0.05)
     else:
-        raise ValueError("clipboard is busy")
+        raise ClipboardBusy("clipboard is busy")
     try:
         handle = user32.GetClipboardData(CF_DIB)
         if not handle:
@@ -181,7 +188,10 @@ def _snip():
     while time.monotonic() < deadline:
         time.sleep(0.2)
         if user32.GetClipboardSequenceNumber() != before and user32.IsClipboardFormatAvailable(CF_DIB):
-            return dib_to_png(_clipboard_dib())
+            try:
+                return dib_to_png(_clipboard_dib())
+            except ClipboardBusy:  # a clipboard manager or cloud sync is reading it too
+                continue
     raise ValueError("screenshot cancelled (no selection)")
 
 

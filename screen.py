@@ -83,7 +83,7 @@ def capture(mode):
 
 # ---- KDE ----
 
-ROTATED = {2, 8}  # kscreen rotation: left / right swap width and height
+ROTATED = {2, 8, 32, 128}  # kscreen rotation: left, right and their flipped twins are portrait
 
 
 def kde_screens(run=subprocess.run):
@@ -96,7 +96,9 @@ def kde_screens(run=subprocess.run):
     for o in outputs:
         if not (o.get("enabled") and o.get("connected")):
             continue
-        w, h = o["size"]["width"], o["size"]["height"]
+        # The current mode is the panel's own (landscape) size; "size" may already be turned.
+        mode = next((m for m in o.get("modes", []) if m.get("id") == o.get("currentModeId")), None)
+        w, h = (mode or o)["size"]["width"], (mode or o)["size"]["height"]
         if o.get("rotation") in ROTATED:
             w, h = h, w
         scale = o.get("scale") or 1
@@ -132,12 +134,16 @@ def spectacle_capture(kind, name, label, run=subprocess.run):
     with tempfile.TemporaryDirectory(prefix="sketchpad-shot-") as tmp:
         path = Path(tmp) / f"{secrets.token_hex(6)}.png"
         try:
-            run(["spectacle", "-b", "-n", *spectacle_args(kind, name), "-o", str(path)],
-                capture_output=True, timeout=TIMEOUTS[kind])
+            done = run(["spectacle", "-b", "-n", *spectacle_args(kind, name), "-o", str(path)],
+                       capture_output=True, timeout=TIMEOUTS[kind])
         except subprocess.TimeoutExpired as error:
             raise ValueError("screenshot timed out") from error
         if not path.exists():
-            raise ValueError("screenshot cancelled" if kind == "box" else "spectacle saved no image")
+            if kind == "box" and done.returncode == 0:
+                raise ValueError("screenshot cancelled")
+            said = (done.stderr or b"").decode(errors="replace").strip().splitlines()
+            raise ValueError("spectacle saved no image (is a Spectacle window open? close it)"
+                             + (f": {said[-1]}" if said else ""))
         return image(path.read_bytes(), label, crop)
 
 

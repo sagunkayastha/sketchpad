@@ -287,6 +287,9 @@ def load_helper_token():
 
 
 def main():
+    if sys.stderr is None:  # pythonw (a Windows logon task): request logging would crash every reply
+        log = open(Path.home() / ".config" / "sketchpad" / "server.log", "a", buffering=1)
+        sys.stdout = sys.stderr = log
     ap = argparse.ArgumentParser()
     ap.add_argument("command", nargs="?", choices=["serve", "helper", "set-password"], default="serve")
     ap.add_argument("--bind", action="append", help="address to listen on (repeatable)")

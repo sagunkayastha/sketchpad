@@ -449,17 +449,20 @@ async function loadScreens() {
   const host = $("screen-host").value;
   const which = $("screen-which");
   which.innerHTML = "";
-  let screens = [], cursor = true;
+  let screens = [], cursor = true, all = "all";
   try {
     ({ screens = [], cursor = true } = await api(`/api/screens?${new URLSearchParams({ host })}`));
-  } catch { /* offline or an older helper: offer under cursor and all */ }
+  } catch { // offline, or a helper older than /api/screens: "full" is the one mode both know
+    cursor = false;
+    all = "full";
+  }
   if (host !== $("screen-host").value) return; // the host changed while this was loading
   which.innerHTML = "";
   if (cursor) which.append(new Option("Under cursor", "screen"));
   for (const s of screens) {
     which.append(new Option(`${s.name} ${s.width}×${s.height}${s.primary ? " ★" : ""}`, `screen:${s.name}`));
   }
-  if (screens.length !== 1) which.append(new Option("All screens", "all"));
+  if (screens.length !== 1) which.append(new Option("All screens", all));
   const saved = store.get(`${WHICH_KEY}:${host}`);
   if ([...which.options].some((o) => o.value === saved)) which.value = saved;
 }
