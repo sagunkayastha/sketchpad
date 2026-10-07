@@ -287,6 +287,13 @@ def run_session_checks(page, home, inbox):
     check("session received the text and the sketch path",
           len(inbox.messages) == 1 and inbox.messages[0].startswith("e2e hello [sketch: "))
 
+    page.fill("#text", "e2e keyboard")
+    page.evaluate("document.getElementById('status').textContent = ''")
+    page.press("#text", "Control+Enter")
+    page.wait_for_function("document.getElementById('status').textContent.includes('Sent to e2e-one')", timeout=10000)
+    check("Ctrl+Enter in the message box sends", len(inbox.messages) == 2 and inbox.messages[1] == "e2e keyboard")
+    inbox.messages.pop()
+
     (home / ".claude" / "sessions" / "s1.json").unlink()
     page.wait_for_function("document.getElementById('send').textContent === 'Send'", timeout=10000)
     page.fill("#text", "to nowhere")

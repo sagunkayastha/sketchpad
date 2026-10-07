@@ -662,3 +662,11 @@ $("send").onclick = async () => {
     $("send").disabled = false;
   }
 };
+// Ctrl+Enter (Cmd+Enter on a Mac) sends from anywhere on the page. Excalidraw's own text
+// editor keeps it (there it finishes the text), and open dialogs keep their own keys.
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.repeat) return;
+  if (e.target.closest?.(".excalidraw-wysiwyg, #url-dialog, #browser")) return;
+  e.preventDefault();
+  if (!$("send").disabled && !$("send").hidden) $("send").click();
+}, true);
