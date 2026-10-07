@@ -144,6 +144,15 @@ the hub with Windows' ssh, copy the hub's `helper-token` to
 logon tasks for the helper and a reverse tunnel (`deploy\windows\tunnel.ps1`, hub port
 8792 by default); then add `--remote laptop=http://127.0.0.1:8792` on the hub.
 
+**Windows + WSL**: when your Claude sessions run in WSL on that Windows machine, run a second
+helper inside WSL (`python3 server.py helper --bind 127.0.0.1 --port 8793`, e.g. as the
+`deploy/sketchpad-helper.service` unit with `--port 8793`, and the same `helper-token`) and install
+the Windows side with `install.ps1 -Wsl http://127.0.0.1:8793` (or, on an existing install, put
+that URL on one line in `%USERPROFILE%\.config\sketchpad\wsl`; the helper reads it when it restarts). The hub still sees one machine:
+the WSL sessions and Windows' screenshots and headless browser under the same name. Image
+browsing goes to WSL (`/mnt/c/...` reaches Windows' disk; a `C:\...` path falls back to Windows).
+When WSL isn't running, the machine shows no sessions but screenshots still work.
+
 `deploy/` has systemd user units for the hub, the helper and the tunnel, and an
 optional Tailscale sidecar (`docker-compose.yml`) that exposes the hub over HTTPS on
 your tailnet for use away from home. Edit the addresses in them before installing.
@@ -153,7 +162,7 @@ your tailnet for use away from home. Edit the addresses in them before installin
 ```
 python3 server.py set-password              set the login (asks interactively)
 python3 server.py serve  [--bind ADDR]... [--port 8790] [--remote NAME=URL]...
-python3 server.py helper [--bind ADDR]... [--port 8791]
+python3 server.py helper [--bind ADDR]... [--port 8791] [--wsl URL]
 ```
 
 `--bind` and `--remote` can be repeated. A helper needs `~/.config/sketchpad/helper-token`;

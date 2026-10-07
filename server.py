@@ -2,6 +2,7 @@
 
 serve  - the hub: web page, login, this machine's sessions, and remote helpers' sessions.
 helper - API-only agent for another machine; the hub reaches it through an SSH tunnel.
+         On Windows, --wsl adds a WSL helper behind it, so one machine shows both halves.
 """
 import argparse
 import base64
@@ -42,6 +43,9 @@ MACHINE_ROUTES = {"/api/ls": lambda path: files.list_dir(path),
                   "/api/urlshot": lambda url: urlshot.capture(url)}
 HELPER_TIMEOUTS = {"/api/ls": 5, "/api/image": 20, "/api/screens": 10, "/api/screenshot": 130,
                    "/api/urlshot": 40}  # a box screenshot waits for a person
+# A Windows helper with a WSL helper behind it: files go to WSL (whose /mnt/c reaches Windows'
+# disk too), while screenshots and the headless browser stay on Windows, where the desktop is.
+WSL_ROUTES = {"/api/ls", "/api/image"}
 
 
 def route_arg(route, query):
@@ -232,6 +236,20 @@ class HubHandler(BaseHandler):
 
 class HelperHandler(BaseHandler):
     token = ""
+    wsl = None  # URL of a WSL helper on this Windows machine (same token), or None
+
+    def own_sessions(self):
+        # A Windows helper only takes screenshots: no tmux or kitty sessions to list there.
+        return [] if sys.platform == "win32" else [public(s) for s in sessions.list_sessions()]
+
+    def from_wsl(self, path, body=None, timeout=3):
+        """(status, body) from the WSL helper; None if there is none or it is down (WSL asleep)."""
+        if not self.wsl:
+            return None
+        try:
+            return call_helper(self.wsl, path, self.token, body, timeout)
+        except (OSError, ValueError):
+            return None
 
     def authorized(self):
         if hmac.compare_digest(self.headers.get("X-Helper-Token", ""), self.token):
@@ -246,10 +264,16 @@ class HelperHandler(BaseHandler):
         elif not self.authorized():
             return
         elif url.path == "/api/list":
-            # A Windows helper only takes screenshots: no tmux or kitty sessions to list there.
-            listed = [] if sys.platform == "win32" else sessions.list_sessions()
-            self.reply(200, {"sessions": [public(s) for s in listed]})
+            listed = self.own_sessions()
+            wsl = self.from_wsl("/api/list")
+            if wsl and wsl[0] == 200:
+                listed += wsl[1].get("sessions", [])
+            self.reply(200, {"sessions": listed})
         else:
+            wsl = self.from_wsl(self.path, timeout=HELPER_TIMEOUTS[url.path]) if url.path in WSL_ROUTES else None
+            if wsl and wsl[0] == 200:  # else a Windows path (C:\...) or WSL is down: try Windows
+                self.reply(*wsl)
+                return
             _, arg = route_arg(url.path, urllib.parse.parse_qs(url.query))
             self.reply(*files.call(MACHINE_ROUTES[url.path], arg))
 
@@ -264,7 +288,9 @@ class HelperHandler(BaseHandler):
         except ValueError as e:
             self.reply(400, {"error": str(e)})
             return
-        self.reply(*deliver_local(req))
+        # The WSL helper owns the sessions it listed; a 404 there means try this machine's own.
+        wsl = self.from_wsl("/api/deliver", req, timeout=20)
+        self.reply(*(wsl if wsl and wsl[0] != 404 else deliver_local(req)))
 
 
 class Server(ThreadingHTTPServer):
@@ -307,12 +333,15 @@ def main():
     ap.add_argument("--port", type=int)
     ap.add_argument("--remote", action="append", default=[], metavar="NAME=URL",
                     help="helper to include, e.g. laptop=http://127.0.0.1:8791 (repeatable)")
+    ap.add_argument("--wsl", metavar="URL",
+                    help="helper only: a WSL helper to merge in, e.g. http://127.0.0.1:8793")
     args = ap.parse_args()
     if args.command == "set-password":
         set_password()
         return
     if args.command == "helper":
         HelperHandler.token = load_helper_token()
+        HelperHandler.wsl = args.wsl
         handler, port = HelperHandler, args.port or 8791
     else:
         HubHandler.creds = auth.load_credentials()

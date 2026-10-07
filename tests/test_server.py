@@ -192,6 +192,74 @@ class DeliverLocalTest(unittest.TestCase):
         self.assertTrue(first["partial"] and retry["partial"] and retry["duplicate"])
         self.assertEqual(self.deliver.call_count, 1)
 
+class WslHelperTest(unittest.TestCase):
+    """A Windows helper with a WSL helper behind it shows up as one machine."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.d = Path(cls.tmp.name).resolve()
+        (cls.d / "p.png").write_bytes(PNG)
+        server.HelperHandler.log_message = lambda *a: None
+        server.HelperHandler.token = "helper-secret"
+        cls.inner = start(server.HelperHandler)  # the WSL helper
+
+        class Windows(server.HelperHandler):
+            wsl = f"http://127.0.0.1:{cls.inner.server_address[1]}"
+
+            def own_sessions(self):
+                return []
+
+        cls.windows_handler = Windows
+        cls.outer = start(Windows)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.outer.shutdown()
+        cls.inner.shutdown()
+        cls.tmp.cleanup()
+
+    def call(self, path, body=None):
+        url = f"http://127.0.0.1:{self.outer.server_address[1]}"
+        return server.call_helper(url, path, "helper-secret", body, timeout=10)
+
+    def test_lists_wsl_sessions(self):
+        s = {"id": "a", "name": "wsl-one", "target": {"kind": "tmux", "pane": "%1"}}
+        with mock.patch.object(server.sessions, "list_sessions", return_value=[s]):
+            status, body = self.call("/api/list")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["sessions"], [{"id": "a", "name": "wsl-one"}])
+
+    def test_wsl_down_still_lists_and_shoots(self):
+        shot = {"name": "screen-full.png", "mimeType": "image/png", "dataURL": "data:image/png;base64,AAAA"}
+        with mock.patch.object(self.windows_handler, "wsl", "http://127.0.0.1:9"), \
+                mock.patch.object(server.screen, "capture", return_value=shot):
+            self.assertEqual(self.call("/api/list"), (200, {"sessions": []}))
+            self.assertEqual(self.call("/api/screenshot?mode=full"), (200, shot))
+
+    def test_files_from_wsl_and_screens_from_windows(self):
+        with mock.patch.object(server.files, "list_dir", wraps=server.files.list_dir) as ls, \
+                mock.patch.object(server.screen, "list_screens", return_value={"screens": []}) as screens:
+            status, body = self.call(f"/api/ls?{urllib.parse.urlencode({'path': str(self.d)})}")
+            self.assertEqual(self.call("/api/screens"), (200, {"screens": []}))
+        self.assertEqual((status, [e["name"] for e in body["entries"]]), (200, ["p.png"]))
+        self.assertEqual(ls.call_count, 1)  # answered once, by WSL, not again by Windows
+        self.assertEqual(screens.call_count, 1)
+
+    def test_path_wsl_cannot_open_falls_back_to_windows(self):
+        with mock.patch.object(server.files, "list_dir",
+                               side_effect=[FileNotFoundError("C:/x"), {"path": "C:/x", "entries": []}]):
+            self.assertEqual(self.call("/api/ls?path=C:/x"), (200, {"path": "C:/x", "entries": []}))
+
+    def test_deliver_goes_to_wsl_then_windows(self):
+        with mock.patch.object(server, "_deliver", side_effect=[(200, {"ok": True}), (404, {"error": "nope"}),
+                                                                 (200, {"ok": True, "windows": True})]) as d:
+            self.assertEqual(self.call("/api/deliver", {"session": "a", "text": "hi"}), (200, {"ok": True}))
+            self.assertEqual(self.call("/api/deliver", {"session": "b", "text": "hi"}),
+                             (200, {"ok": True, "windows": True}))
+        self.assertEqual(d.call_count, 3)
+
+
 class HelperTokenTest(unittest.TestCase):
     def test_empty_token_file_is_refused(self):
         with tempfile.TemporaryDirectory() as d:

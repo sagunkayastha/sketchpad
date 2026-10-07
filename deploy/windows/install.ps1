@@ -3,7 +3,8 @@
 # Needs: Python 3.12+ from python.org or winget, key login to the hub with
 # Windows' own ssh, and the shared secret in ~\.config\sketchpad\helper-token.
 # Run in a normal (not admin) PowerShell:  powershell -ExecutionPolicy Bypass -File install.ps1
-param([string]$Hub = "archbox", [int]$HubPort = 8792)
+# -Wsl http://127.0.0.1:8793 also reaches a WSL helper, so its sessions show under this machine.
+param([string]$Hub = "archbox", [int]$HubPort = 8792, [string]$Wsl = "")
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 
@@ -22,7 +23,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 
 # Task restarts only cover a failed start, so helper.ps1 restarts the helper itself.
 $helper = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $repo `
-    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$repo\deploy\windows\helper.ps1`""
+    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$repo\deploy\windows\helper.ps1`"$(if ($Wsl) { " -Wsl $Wsl" })"
 Register-ScheduledTask -TaskName "sketchpad-helper" -Action $helper -Trigger $trigger `
     -Settings $settings -Force | Out-Null
 
