@@ -267,6 +267,17 @@ class HelperHandler(BaseHandler):
         self.reply(*deliver_local(req))
 
 
+class Server(ThreadingHTTPServer):
+    """Windows lets a second process bind a port that has SO_REUSEADDR (which http.server sets),
+    so a stray old helper could keep answering beside the new one. There, the port is exclusive."""
+    if sys.platform == "win32":
+        allow_reuse_address = False
+
+        def server_bind(self):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            super().server_bind()
+
+
 def set_password():
     username = input("Username: ").strip()
     password = getpass.getpass("Password: ")
@@ -311,7 +322,7 @@ def main():
         if HubHandler.remotes:
             HubHandler.helper_token = load_helper_token()
         handler, port = HubHandler, args.port or 8790
-    servers = [ThreadingHTTPServer((addr, port), handler) for addr in args.bind or ["127.0.0.1"]]
+    servers = [Server((addr, port), handler) for addr in args.bind or ["127.0.0.1"]]
     for srv in servers:
         print(f"sketchpad {args.command} on http://{srv.server_address[0]}:{port}/", flush=True)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
