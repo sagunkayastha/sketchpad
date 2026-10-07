@@ -84,7 +84,8 @@ html, body {
 #history-list .sub { color: var(--muted); font-size: 12px; }
 #history-status { min-height: 18px; color: var(--muted); font-size: 13px; }
 
-#screen-menu { position: absolute; left: 8px; bottom: 64px; z-index: 20; display: flex; gap: 8px; padding: 8px;
+#screen-menu { position: absolute; left: 8px; bottom: 64px; z-index: 20; display: flex; flex-wrap: wrap; gap: 8px; padding: 8px;
+  max-width: calc(100% - 32px);
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, .25); }
 #screen-menu[hidden] { display: none; }
 #screen-menu select { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--border);

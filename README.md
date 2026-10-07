@@ -30,10 +30,12 @@ image on its next turn.
   computer* opens the browser's share picker; pick a screen or window and one frame lands
   on the board (double-click it to crop). Needs the https:// address; on plain http the
   browser hides the picker, so paste a screenshot instead.
-- **Screenshot a machine's desktop**: **Screen ▾** → *Full screen* or *Select box*.
-  The machine's desktop screenshot portal handles the capture and area picker. Esc
-  cancels. The shot lands on the board like an opened image. A desktop may ask once
-  for permission to allow a non-interactive full-screen capture.
+- **Screenshot a machine's desktop**: **Screen ▾**, pick the machine, then *Select box*
+  (drag a region on any monitor; Esc cancels) or *Screen* with a choice of *Under cursor*,
+  one monitor by name, or *All screens*. The shot lands on the board like an opened image.
+  KDE uses spectacle's command line (no dialog), Windows its own snipping overlay for the
+  box and a direct capture for screens; other Linux desktops fall back to the screenshot
+  portal (box and all screens only, and it may ask once for permission).
 - **Screenshot a URL**: **URL…** captures a web page with a headless browser on the
   selected session's machine. `http://localhost:5173` reaches that machine's dev
   server. The shot lands on the board unlocked, ready to resize and annotate.
@@ -80,8 +82,9 @@ in that terminal.
 ## Requirements
 
 - Python 3.9+ (no packages needed to run)
-- A reachable desktop session bus and system libgio on machines whose screen **Screen**
-  should capture. The desktop portal supplies the area picker; no flameshot is used.
+- For **Screen** on a machine: KDE needs `spectacle` and `kscreen-doctor` (both ship
+  with Plasma); Windows needs nothing extra; other desktops need a session bus and libgio
+  for the screenshot portal. No flameshot is used.
 - Google Chrome, Chromium, or `chromium-browser` on a machine whose URLs **URL…**
   should capture. The server uses its headless CLI; no Python browser package is needed.
 - Claude Code 2.1 or newer, in any terminal. Sessions inside **tmux** or **kitty** get
@@ -134,6 +137,13 @@ can't reach directly, run a reverse SSH tunnel from the laptop instead:
 `deploy/tunnel.sh` keeps `hub:127.0.0.1:8791` pointed at the laptop's helper
 (set `SKETCHPAD_HUB` to the hub's ssh host alias).
 
+A Windows machine can be a helper too, for screenshots only (it lists no sessions):
+install Python from python.org or `winget install Python.Python.3.13`, set up key login to
+the hub with Windows' ssh, copy the hub's `helper-token` to
+`%USERPROFILE%\.config\sketchpad\`, and run `deploy\windows\install.ps1`. It registers
+logon tasks for the helper and a reverse tunnel (`deploy\windows\tunnel.ps1`, hub port
+8792 by default); then add `--remote laptop=http://127.0.0.1:8792` on the hub.
+
 `deploy/` has systemd user units for the hub, the helper and the tunnel, and an
 optional Tailscale sidecar (`docker-compose.yml`) that exposes the hub over HTTPS on
 your tailnet for use away from home. Edit the addresses in them before installing.
@@ -167,11 +177,12 @@ Layout:
 | `server.py` | HTTP server: hub and helper roles, routes, CLI |
 | `sessions.py` | find Claude Code sessions, pick tmux pane / kitty window / inbox socket, deliver text |
 | `files.py` | folder listing and image reading for the **Image…** browser |
-| `screen.py` | desktop portal screenshots for the **Screen** button |
+| `screen.py` | **Screen** button: spectacle on KDE, portal elsewhere, monitor list |
+| `screen_win.py` | **Screen** on Windows: GDI capture, snipping overlay for the box |
 | `urlshot.py` | headless browser capture for **URL…** on the selected machine |
 | `auth.py` | password hashing and signed cookies |
 | `static/` | the page: `index.html`, `app.js` (Excalidraw mount, session list, send), `login.html`, `style.css` |
-| `deploy/` | systemd units, tunnel script, Tailscale sidecar |
+| `deploy/` | systemd units, tunnel script, Tailscale sidecar; `windows/` logon tasks |
 
 ## Limitations
 

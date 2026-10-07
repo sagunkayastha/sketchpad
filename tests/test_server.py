@@ -78,6 +78,13 @@ class FileRoutesTest(unittest.TestCase):
             self.assertEqual(self.hub_get("/api/screenshot", host="remote", mode="box"), (200, shot))
         self.assertEqual([c.args for c in capture.call_args_list], [("full",), ("box",)])
 
+    def test_screens_local_and_through_helper(self):
+        listing = {"screens": [{"name": "DP-2", "x": 0, "y": 0, "width": 10, "height": 10, "primary": True}]}
+        with mock.patch.object(server.screen, "list_screens", return_value=listing) as screens:
+            self.assertEqual(self.hub_get("/api/screens"), (200, listing))
+            self.assertEqual(self.hub_get("/api/screens", host="remote"), (200, listing))
+        self.assertEqual(screens.call_count, 2)
+
     def test_screenshot_error_is_400(self):
         with mock.patch.object(server.screen, "capture", side_effect=ValueError("screenshot cancelled")):
             status, body = self.hub_get("/api/screenshot", host="remote", mode="box")

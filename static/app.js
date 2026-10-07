@@ -439,7 +439,50 @@ $("open-screen").onclick = () => {
   if (has(saved)) picker.value = saved;
   else if (selected && has(selected.host)) picker.value = selected.host;
   menu.hidden = false;
+  loadScreens();
 };
+$("screen-host").onchange = loadScreens;
+
+// The chosen machine's monitors: "under the cursor" first, then each by name, then all of them.
+const WHICH_KEY = "sketchpad-screen-which";
+async function loadScreens() {
+  const host = $("screen-host").value;
+  const which = $("screen-which");
+  which.innerHTML = "";
+  let screens = [], cursor = true;
+  try {
+    ({ screens = [], cursor = true } = await api(`/api/screens?${new URLSearchParams({ host })}`));
+  } catch { /* offline or an older helper: offer under cursor and all */ }
+  if (host !== $("screen-host").value) return; // the host changed while this was loading
+  which.innerHTML = "";
+  if (cursor) which.append(new Option("Under cursor", "screen"));
+  for (const s of screens) {
+    which.append(new Option(`${s.name} ${s.width}×${s.height}${s.primary ? " ★" : ""}`, `screen:${s.name}`));
+  }
+  if (screens.length !== 1) which.append(new Option("All screens", "all"));
+  const saved = store.get(`${WHICH_KEY}:${host}`);
+  if ([...which.options].some((o) => o.value === saved)) which.value = saved;
+}
+
+// A named KDE monitor arrives as the whole desktop plus the rectangle to keep.
+function cropShot(shot) {
+  const c = shot.crop;
+  if (!c) return Promise.resolve(shot);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = img.naturalWidth / c.desktopWidth; // desktop units to image pixels (HiDPI)
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(c.width * k);
+      canvas.height = Math.round(c.height * k);
+      canvas.getContext("2d").drawImage(img, c.x * k, c.y * k, canvas.width, canvas.height,
+        0, 0, canvas.width, canvas.height);
+      resolve({ name: shot.name, mimeType: "image/png", dataURL: canvas.toDataURL("image/png") });
+    };
+    img.onerror = () => reject(new Error("couldn't read the screenshot"));
+    img.src = shot.dataURL;
+  });
+}
 
 async function screenshot(mode) {
   if (shooting) return;
@@ -450,7 +493,7 @@ async function screenshot(mode) {
   setStatus(mode === "box" ? `Select an area on ${host}'s desktop (Esc cancels)…` : `Capturing ${host}'s screen…`);
   await new Promise((r) => setTimeout(r, 200)); // let the menu disappear before the desktop picker opens
   try {
-    await insertImage(await api(`/api/screenshot?${new URLSearchParams({ host, mode })}`));
+    await insertImage(await cropShot(await api(`/api/screenshot?${new URLSearchParams({ host, mode })}`)));
     setStatus("");
   } catch (e) {
     setStatus(e.message, true);
@@ -536,7 +579,11 @@ $("camera-pick").hidden = !phone;
 $("camera-pick").onclick = () => $("camera-file").click();
 $("camera-file").onchange = () => insertDeviceFile($("camera-file"));
 $("shot-local").onclick = screenshotLocal;
-$("shot-full").onclick = () => screenshot("full");
+$("shot-screen").onclick = () => {
+  const mode = $("screen-which").value || "all";
+  store.set(`${WHICH_KEY}:${$("screen-host").value}`, mode);
+  screenshot(mode);
+};
 $("shot-box").onclick = () => screenshot("box");
 
 // ---- URL screenshot on the selected session's machine ----

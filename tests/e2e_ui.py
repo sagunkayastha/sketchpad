@@ -107,6 +107,28 @@ def fake_screenshot(interactive, timeout):
     return 0, Path(name).as_uri()
 portal_dbus.screenshot = fake_screenshot
 ''')
+    # KDE: two 320x360 monitors side by side; spectacle "saves" the 640x360 fake desktop.
+    kscreen = home / "bin" / "kscreen-doctor"
+    kscreen.write_text(r"""#!/usr/bin/env python3
+import json
+def out(name, x, primary):
+    return {"name": name, "enabled": True, "connected": True, "pos": {"x": x, "y": 0},
+            "size": {"width": 320, "height": 360}, "scale": 1, "rotation": 1, "priority": 1 if primary else 2}
+print(json.dumps({"outputs": [out("LEFT-1", 0, True), out("RIGHT-2", 320, False)]}))
+""")
+    spectacle = home / "bin" / "spectacle"
+    spectacle.write_text(r"""#!/usr/bin/env python3
+import os, shutil, sys
+from pathlib import Path
+h = Path(os.environ["HOME"])
+out = sys.argv.index("-o") + 1
+with (h / "spectacle-args").open("a") as log:
+    log.write(" ".join(sys.argv[1:out - 1]) + "\n")
+if not (h / "cancel").exists():
+    shutil.copyfile(h / "fake-screen.png", sys.argv[out])
+""")
+    for tool in (kscreen, spectacle):
+        tool.chmod(0o755)
     browser_cli = home / "bin" / "google-chrome"
     browser_cli.write_text('''#!/usr/bin/env python3
 import os, shutil, sys
@@ -345,28 +367,42 @@ def run_screen_checks(page, home):
     page.wait_for_selector("#screen-menu:not([hidden])")
     check("screen menu defaults to the selected session's machine",
           page.input_value("#screen-host") == page.evaluate("JSON.parse(localStorage.getItem('sketchpad-selected')).host"))
-    page.click("#shot-full")
-    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 1", timeout=10000)
-    size = page.evaluate("""async () => {
+    page.wait_for_function("document.querySelectorAll('#screen-which option').length === 4", timeout=10000)
+    options = page.eval_on_selector_all("#screen-which option", "els => els.map((o) => o.value)")
+    check("screen list: under cursor, each monitor, all",
+          options == ["screen", "screen:LEFT-1", "screen:RIGHT-2", "all"])
+    last_size = """async () => {
       const f = Object.values(window.sketchpad.api.getFiles()).pop();
       const i = new Image(); i.src = f.dataURL; await i.decode(); return [i.naturalWidth, i.naturalHeight];
-    }""")
-    check("Full screen puts the (fake) screenshot on the board", size == [640, 360])
+    }"""
+
+    page.select_option("#screen-which", "all")
+    page.click("#shot-screen")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 1", timeout=10000)
+    check("All screens puts the whole (fake) desktop on the board", page.evaluate(last_size) == [640, 360])
     check("menu is hidden after capturing", page.locator("#screen-menu").is_hidden())
 
     page.click("#open-screen")
-    page.click("#shot-box")
+    page.wait_for_function("document.querySelectorAll('#screen-which option').length === 4", timeout=10000)
+    check("the last screen choice is remembered", page.input_value("#screen-which") == "all")
+    page.select_option("#screen-which", "screen:RIGHT-2")
+    page.click("#shot-screen")
     page.wait_for_function("window.sketchpad.api.getSceneElements().length === 2", timeout=10000)
-    calls = (home / "portal-args").read_text().splitlines()
-    check("portal full is noninteractive and box uses its area picker",
-          calls == ["False 15", "True 120"])
+    check("one named monitor is cut out of the desktop", page.evaluate(last_size) == [320, 360])
+
+    page.click("#open-screen")
+    page.click("#shot-box")
+    page.wait_for_function("window.sketchpad.api.getSceneElements().length === 3", timeout=10000)
+    calls = (home / "spectacle-args").read_text().splitlines()
+    check("spectacle runs in the background: -f for all and named, -r for box",
+          calls == ["-b -n -f", "-b -n -f", "-b -n -r"])
 
     (home / "cancel").touch()
     page.click("#open-screen")
     page.click("#shot-box")
     page.wait_for_function("document.getElementById('status').textContent.includes('cancelled')", timeout=10000)
-    check("portal cancel shows 'cancelled' and adds nothing",
-          page.evaluate("window.sketchpad.api.getSceneElements().length") == 2)
+    check("box cancel shows 'cancelled' and adds nothing",
+          page.evaluate("window.sketchpad.api.getSceneElements().length") == 3)
     page.evaluate("window.sketchpad.api.resetScene()")
 
     # "This computer" uses the browser's share picker; stand in a 320x200 canvas stream for it.

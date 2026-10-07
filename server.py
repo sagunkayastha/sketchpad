@@ -37,9 +37,10 @@ CONTENT_TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/c
 # Looked up at call time, so tests that patch screen.capture can never reach the real screen.
 MACHINE_ROUTES = {"/api/ls": lambda path: files.list_dir(path),
                   "/api/image": lambda path: files.read_image(path),
+                  "/api/screens": lambda _: screen.list_screens(),
                   "/api/screenshot": lambda mode: screen.capture(mode),
                   "/api/urlshot": lambda url: urlshot.capture(url)}
-HELPER_TIMEOUTS = {"/api/ls": 5, "/api/image": 20, "/api/screenshot": 130,
+HELPER_TIMEOUTS = {"/api/ls": 5, "/api/image": 20, "/api/screens": 10, "/api/screenshot": 130,
                    "/api/urlshot": 40}  # a box screenshot waits for a person
 
 
@@ -245,7 +246,9 @@ class HelperHandler(BaseHandler):
         elif not self.authorized():
             return
         elif url.path == "/api/list":
-            self.reply(200, {"sessions": [public(s) for s in sessions.list_sessions()]})
+            # A Windows helper only takes screenshots: no tmux or kitty sessions to list there.
+            listed = [] if sys.platform == "win32" else sessions.list_sessions()
+            self.reply(200, {"sessions": [public(s) for s in listed]})
         else:
             _, arg = route_arg(url.path, urllib.parse.parse_qs(url.query))
             self.reply(*files.call(MACHINE_ROUTES[url.path], arg))
